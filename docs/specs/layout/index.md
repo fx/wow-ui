@@ -20,11 +20,12 @@ Every element MUST accept these props:
 |------|---------|
 | `width`, `height` | Fixed size; when both are set the element is not measured |
 | `minWidth`, `minHeight` | Lower bounds on the measured size (and on a flexible child's share) |
-| `maxWidth` | Upper bound on the measured width |
+| `maxWidth` | Upper bound on the measured width; content is measured within it |
 | `flex` | Share of a stack's free space along its main axis (0 or absent: natural size) |
 | `alignSelf` | Overrides the parent stack's `align` for this child |
 
 - Layout props given on a component element MUST win over the same props on the element its render returns.
+- An element's `width`, `minWidth` and `maxWidth` (resolved as above) MUST bound the width its content is measured at, before the content is measured, so content is measured at the width it is placed at.
 
 #### Scenario: Component element carries flex
 
@@ -32,13 +33,19 @@ Every element MUST accept these props:
 - **WHEN** it is used as `Page { flex = 1 }` in a VStack
 - **THEN** the page takes the stack's free space
 
+#### Scenario: Component width over a wrapping row
+
+- **GIVEN** a component whose render returns a wrapping HStack with `width = 300` and three 90 × 20 children
+- **WHEN** it is used as `Row { width = 100 }` in a start-aligned VStack, followed by a sibling
+- **THEN** the row is 100 px wide and 60 px tall, and the sibling starts below it
+
 ### Stacks
 
 `UI.HStack` lays children out in a row, `UI.VStack` in a column.
 
 - Stacks MUST accept `gap` (space between children), `padding` (a number, `{ vertical, horizontal }`, `{ top, horizontal, bottom }` or `{ top, right, bottom, left }`), `align` (`start` · `center` · `end` · `stretch`, across the main axis; default `center` for HStack and `stretch` for VStack) and `justify` (`start` · `center` · `end` · `between`, along the main axis; default `start`).
 - Children without `flex` MUST get their natural size along the main axis, each measured within the space left by the children before it and the gaps between them (a flexible child before it counting at its minimum).
-- Children with `flex` MUST share the remaining space in proportion to their `flex`, never below their `minWidth` (HStack) or `minHeight` (VStack), 0 when unset (a minimum on the cross axis never stands in for the main-axis one) — a child held at its minimum leaves the rest of the space to the others — and MUST be measured at the share they get, so a flexible child's cross size (for example a wrapping row's height) matches its final width. Measuring a stack and placing its children MUST compute the shares the same way, so the stack is measured as tall (HStack) or as wide (VStack) as the children it places need.
+- Children with `flex` MUST share the remaining space in proportion to their `flex`, never below their `minWidth` (HStack) or `minHeight` (VStack), 0 when unset (a minimum on the cross axis never stands in for the main-axis one) — a child held at its minimum leaves the rest of the space to the others — and MUST be measured at the share they get (the share is their main size, whatever their own `width` or `height` says), so a flexible child's cross size (for example a wrapping row's height) matches its final width. Measuring a stack and placing its children MUST compute the shares the same way, so the stack is measured as tall (HStack) or as wide (VStack) as the children it places need.
 - `justify` MUST apply only when no child is flexible and there is free space; `between` spreads the free space evenly between children.
 - With `align = "stretch"` (or a child's `alignSelf = "stretch"`) a child MUST fill the stack's inner cross size; otherwise its cross size is its natural size, at most the inner cross size, placed at the start, centre or end.
 - Stacks MUST also accept surface props (a theme `surface` role, or `bg`, `border`, `radius`; see [theming](../theming/)), `clip` (clip children to the stack's box) and `alpha`.
@@ -74,7 +81,8 @@ Every element MUST accept these props:
 
 ### Text measuring
 
-- A text element's natural width MUST be its unbounded single-line width; a wrapping text element offered less than that MUST wrap within the offered width and report the height its lines need.
+- A text element's natural width MUST be its unbounded single-line width; a wrapping text element offered less than that MUST wrap within the offered width and report that width and the height its lines need.
+- A text element's measured size MUST NOT depend on the size its region had before (a previous layout, or a pooled region's last use).
 - A wrapping text element offered zero or near-zero width MUST still report a finite height.
 
 #### Scenario: Squeezed wrapping text
@@ -82,6 +90,12 @@ Every element MUST accept these props:
 - **GIVEN** a wrapping text with a long sentence
 - **WHEN** it is measured at width 0
 - **THEN** the reported height is finite
+
+#### Scenario: Text that stops wrapping
+
+- **GIVEN** a wrapping text laid out at 100 px over several lines, above a button
+- **WHEN** its parent widens to 800 px
+- **THEN** one layout makes the text one line high and moves the button up to follow it
 
 ### Scroll areas
 
@@ -114,11 +128,17 @@ A scroll area is a clipping box whose content scrolls when it is larger than the
 - **WHEN** it is laid out
 - **THEN** the horizontal range is 170 and the vertical range is 90, each leaving room for the other axis's scrollbar; the wheel scrolls vertically and Shift+wheel horizontally
 
+### Consistency
+
+- Laying a tree out again with nothing changed MUST move and resize nothing.
+- Laying a tree out at one size and then another MUST give the same result as laying it out at the second size fresh, also on pooled regions.
+- Each child of a stack MUST be placed at the size it is measured at, except a flexible child along the main axis (it gets its share) and a stretched child across it (it fills); where the tree fits its frame, no child is placed outside its parent's box, or a scroll area's content box.
+
 ## Design
 
 ### Passes
 
-`measure(node, maxW, maxH)` returns a natural size: fixed `width`/`height` win, a component measures its child, a host uses its own `measure`; the result is clamped by `minWidth`, `minHeight`, `maxWidth`. `place(node, x, y, w, h)` anchors a host's region at `x, -y` from the top-left of its parent frame, sizes it, and calls the host's `layout` to place its children. Floating hosts skip placement and lay themselves out.
+`measure(node, maxW, maxH)` returns a natural size. It first resolves the box props (`width`, `height`, `minWidth`, `minHeight`, `maxWidth`) through the node's component chain, a component's own winning over its rendered child's; fixed `width`/`height` win, and otherwise the host at the end of the chain measures its content within the offer bounded by those props; the result is clamped by the same bounds. A stack measures a flexible child with its share as its exact main size. A text element sets its region to the size it measures at (0 = automatic) before reading the client's string height. `place(node, x, y, w, h)` anchors a host's region at `x, -y` from the top-left of its parent frame, sizes it, and calls the host's `layout` to place its children. Floating hosts skip placement and lay themselves out.
 
 ### Scroll areas
 
