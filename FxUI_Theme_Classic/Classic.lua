@@ -179,6 +179,7 @@ skins.Toggle = {
     box:ClearAllPoints()
     box:SetPoint("LEFT")
     box:SetSize(24, 24)
+    box:SetVertexColor(1, 1, 1, 1)
     local check = K.texture(b, "check", "OVERLAY")
     check:ClearAllPoints()
     check:SetVertexColor(1, 1, 1, 1)
@@ -186,7 +187,6 @@ skins.Toggle = {
     local checkFile = st.enabled and T.check or T.checkDisabled
     if has(T.checkUp) then
       box:SetTexture(T.checkUp)
-      box:SetVertexColor(1, 1, 1, 1)
       if has(checkFile) then
         check:SetTexture(checkFile)
         check:SetAllPoints(box)
@@ -399,10 +399,17 @@ skins.Meter = {
 -- the thumb), centred in the thumb, on a faint dark track.
 skins.Scroll = {
   paintThumb = function(thumb, hot)
-    if thumb.track then thumb.track:SetVertexColor(0, 0, 0, 0.45) end
+    if thumb.track then
+      thumb.track:SetVertexColor(0, 0, 0, 0.45)
+      thumb.track:SetAlpha(1)
+    end
     if not has(T.knob) then
+      -- FxUI's own thumb, colored here: the core colors it only on its own
+      -- path, so a fresh thumb would be untinted and a pooled one keep the
+      -- default theme's color.
       hide(thumb, "knob")
       thumb.tex:Show()
+      thumb.tex:SetVertexColor(K.color(hot and "muted" or K.mix("line", "#FFFFFF", 0.1)))
       return
     end
     thumb.tex:Hide()

@@ -88,6 +88,7 @@ Classic MUST draw each component with client art as follows, keeping the behavio
 - Before drawing with a client file, Classic MUST check that the client ships it; for a missing file it MUST draw that part with FxUI's own or flat drawing and report the file once through the error handler ("FxUI Classic: the client has no <path>; using FxUI's own drawing for it").
 - Classic MUST check each file on its own, secondary art (check marks, highlights) included: a missing secondary file MUST NOT take the primary art with it, and the part it draws MUST fall back or be left out on its own.
 - Classic MUST only use client art that still ships in the retail client.
+- A fallback MUST set everything it draws with itself (anchors and size, color and tint, alpha, visibility) rather than rely on what an earlier drawing left on the region, so a region the default theme drew before, updated or reused from the pool, draws exactly like a fresh one.
 
 #### Scenario: Missing button art
 
@@ -100,6 +101,12 @@ Classic MUST draw each component with client art as follows, keeping the behavio
 - **GIVEN** the client ships the checkbox but not its check-mark or highlight textures
 - **WHEN** a checked Classic toggle renders
 - **THEN** it keeps the checkbox art with a flat check inside it (gold, gray when disabled), shows no highlight, and each missing path is reported once
+
+#### Scenario: Fallback on a region the default theme drew
+
+- **GIVEN** client art or backdrops are missing
+- **WHEN** a Classic component draws its fallback on a fresh region, and on a region the default theme drew before (switched while mounted, or reused from the pool)
+- **THEN** both draw the same textures with the same bounds, color, tint and visibility; the flat tab rail is a 1 px line along the top of each rail segment, and the flat meter fill shows its tone untinted
 
 ## Design
 
@@ -118,7 +125,7 @@ Classic MUST draw each component with client art as follows, keeping the behavio
 
 ### Classic tab geometry
 
-The Options-window tab art is designed 24 tall; Classic draws it 30 tall and scales every vertical measure by 30/24. Every tab's art hangs 5 art units below the tab row (6.25 px), with the label 2 units above the art's centre (−3.75 px). The rail opens 9.5 px inside the selected tab art's left and right edges, just inside its flared feet (measured at 10.4 units in). The texture coordinates for every slice are recorded in the theme's maintainer notes.
+The Options-window tab art is designed 24 tall; Classic draws it 30 tall and scales every vertical measure by 30/24. Every tab's art hangs 5 art units below the tab row (6.25 px), with the label 2 units above the art's centre (−3.75 px). The rail opens 9.5 px inside the selected tab art's left and right edges, just inside its flared feet (measured at 10.4 units in). Without the tooltip border art (or without backdrops) the rail is a flat 1 px `#666666` line where the border's top edge would be. The texture coordinates for every slice are recorded in the theme's maintainer notes.
 
 ### Classic colors
 

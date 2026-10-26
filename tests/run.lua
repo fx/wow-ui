@@ -2987,6 +2987,232 @@ test("classic: the flat tab rail and meter fill set their own geometry and tint"
   W.errors = {}
 end)
 
+-- Everything a region tree draws, as sorted lines: each visible texture,
+-- line and font string with its on-screen rect, content, tint, blend mode,
+-- alpha and draw layer (and a file's tex coords and slice margins); each
+-- visible backdrop with its colors; each visible frame's alpha.
+local function drawnState(region)
+  local out = {}
+  local function num(v) return v and string.format("%.2f", v) or "-" end
+  local function nums(...)
+    local s = {}
+    for i = 1, select("#", ...) do s[i] = num((select(i, ...))) end
+    return table.concat(s, ",")
+  end
+  local function rect(r)
+    local l, b, w, h = r:GetRect()
+    if not l then return "unanchored" end
+    return nums(l, b, w, h)
+  end
+  local function drawn(r)
+    if not r:IsVisible() or r._type == "MaskTexture" then return end
+    local line
+    if r._type == "FontString" then
+      local path, size = r:GetFont()
+      line = "text '" .. tostring(r:GetText()) .. "' " .. tostring(path) .. " " .. num(size) .. " color " .. nums(r:GetTextColor())
+    else
+      local content = r._texture and ("file " .. tostring(r._texture))
+        or (r._color and ("color " .. nums(r._color[1], r._color[2], r._color[3], r._color[4]))) or "empty"
+      line = r._type .. " " .. content .. " tint " .. nums(r:GetVertexColor())
+      if r._type == "Texture" then
+        line = line .. " blend " .. r:GetBlendMode()
+        -- Tex coords and slice margins change nothing on a solid color.
+        if r._texture then
+          line = line .. " uv " .. nums(r:GetTexCoord()) .. " slice " .. nums(r:GetTextureSliceMargins())
+        end
+      end
+    end
+    out[#out + 1] = line .. " alpha " .. num(r:GetAlpha()) .. " layer " .. tostring(r:GetDrawLayer()) .. " at " .. rect(r)
+  end
+  local function visit(f)
+    if not f:IsVisible() then return end
+    if f:GetAlpha() ~= 1 then out[#out + 1] = "frame alpha " .. num(f:GetAlpha()) .. " at " .. rect(f) end
+    if f._backdrop then
+      local bg, edge = f._backdropColor or {}, f._backdropBorder or {}
+      out[#out + 1] = "backdrop " .. tostring(f._backdrop.bgFile) .. "|" .. tostring(f._backdrop.edgeFile)
+        .. " at " .. rect(f) .. " bg " .. nums(bg[1], bg[2], bg[3], bg[4]) .. " edge " .. nums(edge[1], edge[2], edge[3], edge[4])
+    end
+    for _, r in ipairs(f._regions or {}) do drawn(r) end
+    for _, c in ipairs({ f:GetChildren() }) do visit(c) end
+  end
+  if region.GetChildren then visit(region) else drawn(region) end
+  table.sort(out)
+  return out
+end
+
+-- The lines only one of two drawn states has.
+local function stateDiff(a, b)
+  local count = {}
+  for _, l in ipairs(a) do count[l] = (count[l] or 0) + 1 end
+  for _, l in ipairs(b) do count[l] = (count[l] or 0) - 1 end
+  local diff = {}
+  for l, n in pairs(count) do
+    if n > 0 then diff[#diff + 1] = "fresh only:  " .. l end
+    if n < 0 then diff[#diff + 1] = "pooled only: " .. l end
+  end
+  table.sort(diff)
+  return diff
+end
+
+test("classic: every fallback path draws a pooled region exactly like a fresh one", function()
+  local primary = {
+    "Interface\\DialogFrame\\UI-DialogBox-Background", "Interface\\DialogFrame\\UI-DialogBox-Border",
+    "Interface\\Tooltips\\UI-Tooltip-Background", "Interface\\Tooltips\\UI-Tooltip-Border",
+    "Interface\\Buttons\\UI-Panel-Button-Up", "Interface\\Buttons\\UI-Panel-Button-Down",
+    "Interface\\Buttons\\UI-Panel-Button-Disabled", "Interface\\Buttons\\UI-CheckBox-Up",
+    "Interface\\OptionsFrame\\UI-OptionsFrame-ActiveTab", "Interface\\DialogFrame\\UI-DialogBox-Header",
+    "Interface\\FriendsFrame\\WhoFrame-ColumnTabs", "Interface\\QuestFrame\\UI-QuestTitleHighlight",
+    "Interface\\Common\\WhiteIconFrame", "Interface\\Buttons\\UI-Panel-MinimizeButton-Up",
+    "Interface\\TargetingFrame\\UI-StatusBar", "Interface\\Buttons\\UI-ScrollBar-Knob",
+  }
+  local secondary = {
+    "Interface\\Buttons\\UI-CheckBox-Check", "Interface\\Buttons\\UI-CheckBox-Check-Disabled",
+    "Interface\\Buttons\\UI-CheckBox-Highlight", "Interface\\Buttons\\UI-Panel-Button-Highlight",
+    "Interface\\PaperDollInfoFrame\\UI-Character-Tab-Highlight", "Interface\\Buttons\\UI-Panel-MinimizeButton-Highlight",
+  }
+  local function set(...)
+    local s = {}
+    for _, list in ipairs({ ... }) do for _, p in ipairs(list) do s[p] = true end end
+    return s
+  end
+  W.items[17] = true
+  local items = {}
+  for i = 1, 30 do items[i] = { id = i, v = "r" .. i } end
+  local function view(theme)
+    return UI.Window { title = "Fallback", width = 560, height = 760, theme = theme, status = "s",
+      UI.HStack { gap = 4,
+        UI.Button { text = "Go" },
+        UI.Button { text = "Ghost", variant = "ghost" },
+        UI.Button { text = "Off", disabled = true },
+        UI.Badge { text = "B", tone = "info" },
+        UI.Badge { text = "S", tone = "gold", solid = true },
+        UI.Toggle { label = "On", checked = true },
+        UI.Toggle { label = "Off", checked = true, disabled = true },
+      },
+      UI.TabBar { tabs = { { id = "x", text = "One", count = 3 }, { id = "y", text = "Two" } }, selected = "x" },
+      UI.ItemCell { item = 17 },
+      UI.Meter { value = 5, max = 10, label = "Fill", valueText = "5/10", tone = "info" },
+      UI.Chart { width = 200, height = 100, values = { 1, 2, 3 } },
+      UI.Table { height = 120, items = items, key = "id", selected = 2, onSelect = function() end,
+        columns = { { key = "v", title = "Value", flex = 1, sortable = true } } },
+      UI.ScrollView { direction = "both", width = 100, height = 60, UI.HStack { width = 300, height = 200 } },
+    }
+  end
+  -- Nodes in tree order, deepest first, so a difference is reported at the
+  -- smallest component that has it.
+  local function nodes(root)
+    local out = {}
+    walk(root.node, function(n) if n.region then table.insert(out, 1, n) end end)
+    return out
+  end
+  -- The regions a pointer can enter: the node's own, its close button and
+  -- its scrollbar thumbs.
+  local function hoverables(r)
+    local out = {}
+    local function add(x) if x and x.GetScript and x:GetScript("OnEnter") then out[#out + 1] = x end end
+    add(r)
+    add(r.close)
+    add(r.thumb)
+    for _, sc in ipairs({ r.fxScroller, r.body and r.body.fxScroller }) do
+      if sc then add(sc.thumbY); add(sc.thumbX) end
+    end
+    return out
+  end
+  -- Differences, each reported once, at the smallest component that has it.
+  local problems, seen = {}, {}
+  local function same(fresh, pooled, what)
+    for _, line in ipairs(stateDiff(drawnState(fresh), drawnState(pooled))) do
+      if not seen[line] then
+        seen[line] = true
+        problems[#problems + 1] = what .. " draws differently when pooled:\n    " .. line
+      end
+    end
+  end
+  local function compare(a, b, label)
+    local na, nb = nodes(a), nodes(b)
+    eq(#na, #nb, label .. ": same tree")
+    for i, n in ipairs(na) do
+      local m = nb[i]
+      eq(n.host.name, m.host.name, label .. ": same tree")
+      ok(n.region ~= m.region, label .. ": distinct regions")
+      local what = label .. ": " .. n.host.name
+      same(n.region, m.region, what)
+      local ha, hb = hoverables(n.region), hoverables(m.region)
+      eq(#ha, #hb, what .. ": same hoverables")
+      for j, x in ipairs(ha) do
+        local y = hb[j]
+        x:GetScript("OnEnter")(x)
+        y:GetScript("OnEnter")(y)
+        same(n.region, m.region, what .. " (hovered)")
+        if n.host.name == "Button" then
+          x:GetScript("OnMouseDown")(x)
+          y:GetScript("OnMouseDown")(y)
+          same(n.region, m.region, what .. " (pressed)")
+          x:GetScript("OnMouseUp")(x)
+          y:GetScript("OnMouseUp")(y)
+        end
+        x:GetScript("OnLeave")(x)
+        y:GetScript("OnLeave")(y)
+        same(n.region, m.region, what .. " (after hover)")
+      end
+    end
+  end
+  -- Hover everything and leave again: the default theme draws (and
+  -- creates) its hover state, and the pointer is gone before the swap.
+  local function hoverAll(root)
+    for _, n in ipairs(nodes(root)) do
+      for _, x in ipairs(hoverables(n.region)) do
+        x:GetScript("OnEnter")(x)
+        x:GetScript("OnLeave")(x)
+      end
+    end
+  end
+
+  local savedPools, savedMixin = I.pools, BackdropTemplateMixin
+  local cases = {
+    { "every client file missing", set(primary, secondary) },
+    { "secondary files missing", set(secondary) },
+    { "no backdrops", nil, true },
+  }
+  for _, case in ipairs(cases) do
+    local label, missing, noBackdrops = case[1], case[2], case[3]
+    W.missingFiles = missing
+    I.wipe(I.textureCache)
+    if noBackdrops then BackdropTemplateMixin = nil end
+    -- Fresh: empty pools, so Classic draws regions nothing drew before.
+    I.pools = {}
+    local fresh = UI.mount(UIParent, view("classic"))
+    -- Pooled: regions the default theme drew, hover included, then reused
+    -- for Classic.
+    local default = UI.mount(UIParent, view("default"))
+    hoverAll(default)
+    local defaultWin = find(default, "Window")[1].region
+    default:unmount()
+    local pooled = UI.mount(UIParent, view("classic"))
+    eq(find(pooled, "Window")[1].region, defaultWin, label .. ": the default theme's window is reused")
+    compare(fresh, pooled, label)
+    -- The same regions switched from the default theme while mounted.
+    pooled:unmount()
+    local switched = UI.mount(UIParent, view("default"))
+    hoverAll(switched)
+    switched:update(view("classic"))
+    compare(fresh, switched, label .. " (switched)")
+    fresh:unmount()
+    switched:unmount()
+    BackdropTemplateMixin = savedMixin
+  end
+  W.missingFiles = nil
+  I.wipe(I.textureCache)
+  W.items[17] = nil
+  W.errors = {}
+  -- Hand the earlier tests' pooled regions back.
+  for name, list in pairs(savedPools) do
+    I.pools[name] = I.pools[name] or {}
+    for _, r in ipairs(list) do table.insert(I.pools[name], r) end
+  end
+  ok(#problems == 0, "\n  " .. table.concat(problems, "\n  "))
+end)
+
 test("classic: layout invariants hold over representative trees at several sizes", function()
   layoutInvariants("classic")
 end)
