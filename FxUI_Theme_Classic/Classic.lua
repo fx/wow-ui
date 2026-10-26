@@ -301,9 +301,17 @@ skins.Tab = {
         return
       end
     end
+    -- Flat: a 1 px line where the border's top edge would be. The core
+    -- places the fill only on its own path, so set all of it here.
     if inner then inner:Hide() end
-    seg.fill:Show()
-    seg.fill:SetColorTexture(0.4, 0.4, 0.4, 1)
+    local fill = seg.fill
+    fill:ClearAllPoints()
+    fill:SetPoint("TOPLEFT")
+    fill:SetPoint("TOPRIGHT")
+    fill:SetHeight(1)
+    fill:SetColorTexture(0.4, 0.4, 0.4, 1)
+    fill:SetVertexColor(1, 1, 1, 1)
+    fill:Show()
   end,
 }
 
@@ -378,7 +386,11 @@ skins.Meter = {
       fill.fxFile = "UI-StatusBar"
       fill:SetVertexColor(K.color(p.tone or "gold"))
     else
+      -- A color texture is multiplied by the vertex color, which the
+      -- default theme's fill leaves tinted: reset it.
       fill:SetColorTexture(K.color(p.tone or "gold"))
+      fill:SetVertexColor(1, 1, 1, 1)
+      fill.fxFile = nil
     end
   end,
 }

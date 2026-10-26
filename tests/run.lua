@@ -2920,6 +2920,73 @@ test("classic: conditional decorations hide again on update and on pooled reuse"
   root:unmount()
 end)
 
+test("classic: the flat tab rail and meter fill set their own geometry and tint", function()
+  W.missingFiles = {
+    ["Interface\\Tooltips\\UI-Tooltip-Border"] = true,
+    ["Interface\\TargetingFrame\\UI-StatusBar"] = true,
+  }
+  I.wipe(I.textureCache)
+  local function view(theme)
+    return UI.VStack { theme = theme, width = 300,
+      UI.TabBar { tabs = { { id = "x", text = "One" }, { id = "y", text = "Two" } }, selected = "x" },
+      UI.Meter { value = 5, max = 10, tone = "info" },
+    }
+  end
+  local function check(root, what)
+    local rail = find(root, "TabRail")[1].region
+    for _, side in ipairs({ "left", "right" }) do
+      local seg, fill = rail[side], rail[side].fill
+      ok(fill:IsShown(), what .. ": flat " .. side .. " rail shown")
+      local l, b, w, h = fill:GetRect()
+      ok(l, what .. ": flat " .. side .. " rail anchored")
+      local sl, sb, sw, sh = seg:GetRect()
+      near(l, sl, what .. ": " .. side .. " rail starts with its segment")
+      near(w, sw, what .. ": " .. side .. " rail spans its segment")
+      near(b + h, sb + sh, what .. ": " .. side .. " rail at the top of its segment")
+      near(h, 1, what .. ": " .. side .. " rail one pixel tall")
+      local r, g, bl, a = fill:GetVertexColor()
+      ok(r == 1 and g == 1 and bl == 1 and a == 1, what .. ": " .. side .. " rail untinted")
+    end
+    local fill = find(root, "Meter")[1].region.fill
+    local info = I.resolve("classic").info
+    local cr, cg, cb = info.r, info.g, info.b
+    ok(fill._color and fill._texture == nil, what .. ": flat meter fill")
+    near(fill._color[1], cr, what .. ": meter in its tone")
+    near(fill._color[2], cg, what .. ": meter in its tone")
+    near(fill._color[3], cb, what .. ": meter in its tone")
+    local r, g, b, a = fill:GetVertexColor()
+    ok(r == 1 and g == 1 and b == 1 and a == 1, what .. ": meter fill untinted, got " .. r .. "," .. g .. "," .. b .. "," .. a)
+    eq(fill.fxFile, nil, what .. ": no file recorded for the flat fill")
+  end
+  local host = CreateFrame("Frame", nil, UIParent)
+  host:SetPoint("TOPLEFT", 10, -10)
+  host:SetSize(300, 200)
+  -- Fresh regions, never drawn by the default theme.
+  local savedPools = I.pools
+  I.pools = {}
+  local root = UI.mount(host, view("classic"))
+  check(root, "fresh")
+  root:unmount()
+  -- Regions the default theme drew, then switched to Classic, and reused
+  -- from the pool.
+  root = UI.mount(host, view("default"))
+  root:update(view("classic"))
+  check(root, "switched")
+  root:unmount()
+  root = UI.mount(host, view("default"))
+  root:unmount()
+  root = UI.mount(host, view("classic"))
+  check(root, "pooled")
+  root:unmount()
+  for name, list in pairs(savedPools) do
+    I.pools[name] = I.pools[name] or {}
+    for _, r in ipairs(list) do table.insert(I.pools[name], r) end
+  end
+  W.missingFiles = nil
+  I.wipe(I.textureCache)
+  W.errors = {}
+end)
+
 test("classic: layout invariants hold over representative trees at several sizes", function()
   layoutInvariants("classic")
 end)
