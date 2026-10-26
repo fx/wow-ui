@@ -3314,8 +3314,10 @@ local function clickTab(root, id)
   W.nextFrame()
 end
 
--- Takes a snapshot without reloading and reads it.
+-- Takes a snapshot without reloading and reads it. It is the only one
+-- stored, so writing and reading it stays quick (also under luacov).
 local function snapshotText(options)
+  FxUIDevDB.snapshots = {}
   FxUIDevCharDB.snapshotReload = false
   chat(function() fx("dev all") end)
   FxUIDevCharDB.snapshotReload = true
