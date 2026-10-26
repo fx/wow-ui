@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # mise builds Lua 5.1.5 from source; its interpreter needs readline.
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libreadline-dev
+      - uses: jdx/mise-action@v5
+      - name: Headless tests
+        run: mise run test
+
+  coverage:
+    name: Coverage (80 % lines)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libreadline-dev
+      - uses: jdx/mise-action@v5
+      - name: Install luacov
+        run: mise exec -- luarocks install luacov 0.17.0-1
+      - name: Tests under luacov and the coverage gate
+        run: mise run coverage
