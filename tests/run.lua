@@ -1937,6 +1937,35 @@ test("layout: text that stops wrapping is measured at one line, also from a pool
   root:unmount()
 end)
 
+test("layout: width props bound content before it is measured", function()
+  local host = CreateFrame("Frame")
+  host:SetSize(500, 400)
+  -- A component's width wins over the width of the row it renders: three
+  -- 90 px chips in 100 px take three lines, and the next sibling follows.
+  local Narrow = UI.component("TestNarrowRow", function()
+    local chips = {}
+    for i = 1, 3 do chips[i] = UI.HStack { width = 90, height = 20 } end
+    return UI.HStack { width = 300, wrap = true, chips }
+  end)
+  local root = UI.mount(host, UI.VStack { align = "start", Narrow { width = 100 }, UI.HStack { tag = "next", width = 10, height = 10 } })
+  local row = find(root, "HStack", function(n) return n.el.props.wrap end)[1]
+  local nextNode = find(root, "HStack", function(n) return n.el.props.tag == "next" end)[1]
+  eq(row.w, 100, "the component's width wins")
+  eq(row.h, 60, "measured at that width: three lines")
+  ok(nextNode.y >= row.y + row.h, "the next sibling starts below the row: " .. tostring(nextNode.y))
+  root:unmount()
+
+  -- A wrapping text with maxWidth in a wide start-aligned column wraps
+  -- within maxWidth and gets the height its lines need.
+  root = UI.mount(host, UI.VStack { align = "start", UI.Text { text = string.rep("word ", 8), wrap = true, maxWidth = 100 } })
+  local text = find(root, "Text")[1]
+  eq(text.w, 100, "clamped to maxWidth")
+  ok(not text.region:IsTruncated(), "every line fits: " .. tostring(text.h))
+  local _, h = I.measure(text, 100, nil)
+  eq(text.h, h, "as tall as its lines at 100")
+  root:unmount()
+end)
+
 test("table: mixed-type columns sort the same way from every starting order", function()
   local values = { 2, 10, "11", "b", "A" }
   local function permutations(list)

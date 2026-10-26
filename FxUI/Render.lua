@@ -375,23 +375,30 @@ local function layoutProp(node, name)
 end
 I.layoutProp = layoutProp
 
+local function bound(v, lo, hi)
+  if lo and v < lo then v = lo end
+  if hi and v > hi then v = hi end
+  return v
+end
+
+-- A node's natural size within maxW x maxH. The box props (width, height,
+-- minWidth, minHeight, maxWidth) are resolved through a component chain, a
+-- component's own winning over its rendered child's, and bound the space the
+-- content is measured in, so content is measured at the width it will get.
 function I.measure(node, maxW, maxH)
-  local p = node.el.props
-  local w, h = p.width, p.height
-  if w and h then return w, h end
+  local w, h = layoutProp(node, "width"), layoutProp(node, "height")
+  local minW, minH = layoutProp(node, "minWidth"), layoutProp(node, "minHeight")
+  local maxWidth = layoutProp(node, "maxWidth")
+  if w and h then return bound(w, minW, maxWidth), bound(h, minH) end
+  local host = node
+  while host and host.def do host = host.child end
   local nw, nh = 0, 0
-  if node.def then
-    if node.child then nw, nh = I.measure(node.child, w or maxW, h or maxH) end
-  elseif node.host.measure then
-    local prevTheme = I.enter(node)
-    nw, nh = node.host.measure(node, w or maxW or HUGE, h or maxH or HUGE)
+  if host and host.host.measure then
+    local prevTheme = I.enter(host)
+    nw, nh = host.host.measure(host, bound(w or maxW or HUGE, minW, maxWidth), bound(h or maxH or HUGE, minH))
     I.leave(prevTheme)
   end
-  w, h = w or nw, h or nh
-  if p.minWidth and w < p.minWidth then w = p.minWidth end
-  if p.minHeight and h < p.minHeight then h = p.minHeight end
-  if p.maxWidth and w > p.maxWidth then w = p.maxWidth end
-  return w, h
+  return bound(w or nw, minW, maxWidth), bound(h or nh, minH)
 end
 
 function I.place(node, x, y, w, h)
