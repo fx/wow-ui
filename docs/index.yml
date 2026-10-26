@@ -45,7 +45,7 @@ changes:
     path: changes/0001-fxui-core.md
     description: FxUI core library, default theme and media, test harness, repository tooling, docs and CI with the coverage gate
     spec: architecture
-    status: draft
+    status: complete
     depends_on: []
   - id: "0002"
     name: theme-addons

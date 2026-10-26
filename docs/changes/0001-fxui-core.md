@@ -5,7 +5,7 @@
 Deliver the FxUI core library addon (`FxUI/`) with its built-in default theme, media and media generators, the headless test harness and library tests, the repository's instruction files and tooling, this documentation tree, and CI with an 80 % line-coverage gate. The behaviour delivered is owned by the [architecture](../specs/architecture/), [rendering](../specs/rendering/), [layout](../specs/layout/), [components](../specs/components/), [data components](../specs/data-components/), [theme tokens](../specs/theme-tokens/) and [theming](../specs/theming/) specs.
 
 **Spec:** [Architecture](../specs/architecture/)
-**Status:** draft
+**Status:** complete
 **Depends On:** —
 
 ## Motivation
@@ -53,7 +53,7 @@ The specs listed in the Summary own every behaviour this change delivers, with t
 
 - Every scenario in the specs listed in the Summary that concerns the core library is exercised by a headless test, except where the stub cannot represent the behaviour (rendered pixels).
 - CI is green on the pull request, including the coverage gate.
-- `grep -rniE 'bling|claude|artifact|canvas|/workspace/|/home/|~/dev' --exclude-dir=.git .` finds only genuine false positives (agent tool configuration such as `CLAUDE.md` files, the client's item quality name).
+- The repository contains no reference to a consumer project, a private repository, a private design document or a local filesystem path, and no account or character name.
 
 ## Design
 
@@ -90,15 +90,15 @@ Further tests are added where needed to reach the coverage gate (for example ite
 
 ## Tasks
 
-- [ ] Deliver the FxUI core library, its tests, tooling, docs and CI (one PR)
-  - [ ] `FxUI/`: `FxUI.toc`, `Core.lua`, `Theme.lua`, `Themes/Default.lua`, `Format.lua`, `Render.lua`, `Surface.lua`, `Commands.lua`, `Scale.lua`, `Components/` (`Layout.lua`, `Controls.lua`, `Data.lua`, `List.lua`, `Table.lua`, `Window.lua`, `Toast.lua`), `Libs/LibStub/LibStub.lua`, `Media/Fonts/` (four TTFs and three `OFL-*.txt`), `Media/Textures/` (`Round4`, `Round4Ring`, `Round8`, `Round8Ring`, `Circle` `.tga`)
-  - [ ] `FxUI/Themes/AGENTS.md` and `FxUI/Themes/CLAUDE.md` (built-in theme notes; references to later slices land with them)
-  - [ ] Media generators: `tools/build-fonts.py`, `tools/build-textures.py`, `tools/requirements.txt`
-  - [ ] Test harness: `tests/wow.lua` and the library tests in `tests/run.lua`, split as in Design, with the library-only counterparts and the tests needed for the coverage gate
-  - [ ] Repository files: `mise.toml` (tools; `test`, `fonts`, `textures` tasks), `README.md` (library sections only), `AGENTS.md` (with the coverage policy), `CLAUDE.md`, `REVIEW.md`, `.coderabbit.yaml`, `.gitignore`
-  - [ ] Documentation: the `docs/` tree (specs, change documents `0001`–`0003`, indexes, `tasks.md`)
-  - [ ] CI: a GitHub Actions workflow under `.github/workflows/` running the tests on pull requests and pushes to `main`, measuring line coverage with luacov (excluding `tests/` and `Libs/`) and failing below 80 %
-  - [ ] Tracking: mark these tasks done and set this document, `docs/index.yml` and `docs/index.md` to `complete`
+- [x] Deliver the FxUI core library, its tests, tooling, docs and CI (one PR)
+  - [x] `FxUI/`: `FxUI.toc`, `Core.lua`, `Theme.lua`, `Themes/Default.lua`, `Format.lua`, `Render.lua`, `Surface.lua`, `Commands.lua`, `Scale.lua`, `Components/` (`Layout.lua`, `Controls.lua`, `Data.lua`, `List.lua`, `Table.lua`, `Window.lua`, `Toast.lua`), `Libs/LibStub/LibStub.lua`, `Media/Fonts/` (four TTFs and three `OFL-*.txt`), `Media/Textures/` (`Round4`, `Round4Ring`, `Round8`, `Round8Ring`, `Circle` `.tga`)
+  - [x] `FxUI/Themes/AGENTS.md` and `FxUI/Themes/CLAUDE.md` (built-in theme notes; references to later slices land with them)
+  - [x] Media generators: `tools/build-fonts.py`, `tools/build-textures.py`, `tools/requirements.txt`
+  - [x] Test harness: `tests/wow.lua` and the library tests in `tests/run.lua`, split as in Design, with the library-only counterparts and the tests needed for the coverage gate
+  - [x] Repository files: `mise.toml` (tools; `test`, `coverage`, `fonts`, `textures` tasks), `README.md` (library sections only), `AGENTS.md` (with the coverage policy), `CLAUDE.md`, `REVIEW.md`, `.coderabbit.yaml`, `.gitignore`
+  - [x] Documentation: the `docs/` tree (specs, change documents `0001`–`0003`, indexes, `tasks.md`)
+  - [x] CI: a GitHub Actions workflow under `.github/workflows/` running the tests on pull requests and pushes to `main`, measuring line coverage with luacov (excluding `tests/` and `Libs/`) and failing below 80 %
+  - [x] Tracking: mark these tasks done and set this document, `docs/index.yml` and `docs/index.md` to `complete`
 
 ## Open Questions
 

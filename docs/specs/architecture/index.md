@@ -178,11 +178,14 @@ The standalone addon saves `FxUIDB` (account-wide): `scale` and `theme`.
 | Task | Runs |
 |------|------|
 | `mise run test` | `lua tests/run.lua` |
+| `mise run coverage` | the tests under luacov (`lua -lluacov tests/run.lua`), luacov's report, then `lua tests/coverage.lua`, which fails below 80 % |
 | `mise run inspect <FxUI_Dev.lua> [options]` | `lua tools/inspect.lua` (see [dev tools](../dev-tools/)) |
 | `mise run fonts <google-fonts-download-dir>` | `python tools/build-fonts.py <dir> FxUI/Media/Fonts` |
 | `mise run textures` | `python tools/build-textures.py FxUI/Media/Textures` |
 
 The media generators run by hand and their outputs are committed; they are Python and outside the Lua coverage gate.
+
+Coverage is measured with luacov (installed with `luarocks install luacov`). `.luacov` excludes `tests/` and every `Libs/` folder; `tests/coverage.lua` reads the report's summary, prints each file's coverage, lowest first, and exits non-zero when the total is below 80 %. CI (`.github/workflows/ci.yml`) runs a test job (`mise run test`) and a coverage job (`mise run coverage`) on pull requests and pushes to `main`.
 
 ### Test harness
 
