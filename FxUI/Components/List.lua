@@ -9,11 +9,11 @@ local THUMB_MIN = 24
 
 local refresh
 
--- Index of the row under the cursor, or nil (outside, past the end, or
--- over the scrollbar).
+-- Index of the row under the cursor, or nil (outside, past the end, over
+-- the scrollbar, or under an open menu).
 local function rowAt(node)
   local f = node.region
-  if not f:IsVisible() or not f:IsMouseOver() then return nil end
+  if not f:IsVisible() or not f:IsMouseOver() or UI.menuOwner() then return nil end
   local p = node.el.props
   local rowH = p.rowHeight or 32
   local scale = f:GetEffectiveScale()
@@ -136,6 +136,7 @@ refresh = function(node, w, h)
     }
   end
   I.reconcileChildren(node, f.content, els)
+  node.first = first
 
   local scrolls = total > h
   node.gutter = scrollW()
@@ -296,6 +297,32 @@ I.defineHost("List", {
     thumb:SetScript("OnUpdate", nil)
   end,
 })
+
+-- A control inside a list row was right-clicked: open that row's menu
+-- (onContextMenu) when the list has one. True when it did, so the control
+-- leaves the click to the row.
+function I.rowContextMenu(node)
+  local row = node
+  while row and row.parent do
+    local list = row.parent
+    if list.host == I.hosts.List then
+      local p = list.el.props
+      if not p.onContextMenu then return false end
+      for j, child in ipairs(list.children or {}) do
+        if child == row then
+          local i = (list.first or 1) + j - 1
+          local item = (p.items or {})[i]
+          if item == nil then return false end
+          p.onContextMenu(item, i, keyOf(p, item, i))
+          return true
+        end
+      end
+      return false
+    end
+    row = list
+  end
+  return false
+end
 
 -- Scroll a mounted list (by its node) to make row i visible.
 function UI.scrollListTo(frame, i)

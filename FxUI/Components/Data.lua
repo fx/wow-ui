@@ -128,7 +128,8 @@ end
 
 -- Props: item (itemID or item link), qty, showLevel, note, iconSize,
 -- tooltip(GameTooltip, itemID) to add lines after the item tooltip,
--- onClick(frame, itemID, link). Shift-click links the item into chat.
+-- onClick(frame, itemID, link, mouseButton). Shift-click links the item
+-- into chat. In a list row with a menu, a right click opens that menu.
 I.defineHost("ItemCell", {
   create = function(holder)
     local f = CreateFrame("Button", nil, holder)
@@ -170,6 +171,7 @@ I.defineHost("ItemCell", {
         insertLink(link)
         return
       end
+      if mouseButton == "RightButton" and I.rowContextMenu(node) then return end
       local onClick = node.el.props.onClick
       if onClick then onClick(self, self.fxItemID, link, mouseButton) end
     end)
@@ -539,7 +541,7 @@ end
 local function hoverUpdate(f)
   local node = f.fxNode
   local g = node and node.geo
-  if not g or g.n == 0 or not f:IsVisible() or not f:IsMouseOver() then
+  if not g or g.n == 0 or not f:IsVisible() or not f:IsMouseOver() or UI.menuOwner() then
     if f.hoverIndex then hideHover(f, node) end
     return
   end

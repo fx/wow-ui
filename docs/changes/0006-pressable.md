@@ -2,7 +2,7 @@
 
 ## Summary
 
-Adds `UI.Pressable`, a container that makes any content a click target: a price over its change, an icon with a label. It stacks its children like `VStack` (or `HStack`), shades on hover and press, shows a tooltip and calls `onClick`.
+Adds `UI.Pressable`, a container that makes any content a click target: a price over its change, an icon with a label. It stacks its children like `VStack` (or `HStack`), is underlined on hover (or washed, for menu items), shows a tooltip, calls `onClick` on a left click and `onContextMenu` on a right one.
 
 **Spec:** [Components](../specs/components/#pressable)
 **Status:** in-progress
@@ -27,7 +27,7 @@ The [components spec](../specs/components/#pressable) owns it; its scenario is t
 ### Decisions
 
 - **A container host on a client `Button`**, laid out with the stack helpers, so it takes the stack props and needs no layout of its own.
-- **Shade, not a border**: it sits inside tables and rows, where a resting border would add noise; at rest it draws nothing.
+- **A decoration, not a background**: it sits inside tables and rows, which already shade the hovered row; a link-like underline under the content marks it without fighting that. Menu items, which are whole rows of the menu, take a wash (`hover = "fill"`). At rest it draws nothing.
 - **In `Controls.lua`**, so the library's `.toc` is unchanged.
 
 ### Non-Goals

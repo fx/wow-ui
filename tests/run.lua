@@ -1191,11 +1191,11 @@ test("tooltip and help: themed, sized to content, above or below its owner, one 
   eq(UI.tooltipOwner(), nil, "hidden for any owner")
 end)
 
-test("pressable: any content as a click target, shaded on hover and press, with a tooltip", function()
+test("pressable: any content as a click target, underlined or washed on hover, with a tooltip", function()
   local host = CreateFrame("Frame", nil, UIParent)
   host:SetSize(300, 100)
   host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 100, -300)
-  local clicks, disabled = {}, false
+  local clicks, menus, disabled = {}, 0, false
   local function view()
     return UI.HStack { gap = 8,
       UI.Pressable { padding = { 2, 6 }, gap = 2, tooltip = "Search it", disabled = disabled,
@@ -1203,7 +1203,8 @@ test("pressable: any content as a click target, shaded on hover and press, with 
         UI.Text { text = "First line" },
         UI.Text { text = "Second", style = "small" },
       },
-      UI.Pressable { horizontal = true, gap = 4, UI.Text { text = "A" }, UI.Text { text = "B" } },
+      UI.Pressable { horizontal = true, gap = 4, hover = "fill", onContextMenu = function() menus = menus + 1 end,
+        UI.Text { text = "A" }, UI.Text { text = "B" } },
     }
   end
   local root = UI.mount(host, view())
@@ -1216,27 +1217,40 @@ test("pressable: any content as a click target, shaded on hover and press, with 
   local row = find({ node = ps[2] }, "Text")
   eq(ps[2].w, row[1].w + 4 + row[2].w, "or a row")
   local f = p.region
-  ok(not (f.fxBg and f.fxBg:IsShown()), "unshaded at rest")
+  ok(not f.underline:IsShown(), "plain at rest")
   f:_fire("OnEnter")
-  ok(f.fxBg:IsShown(), "shaded on hover")
+  ok(f.underline:IsShown(), "underlined on hover")
+  ok(not (f.fxBg and f.fxBg:IsShown()), "no background")
+  local w, h = f.underline:GetSize()
+  eq(w, math.max(t1.w, t2.w), "as wide as the content")
+  eq(h, 1)
   eq(UI.tooltipOwner(), f, "its tooltip")
   f:_fire("OnMouseDown")
   f:_fire("OnMouseUp")
+  f:_click("LeftButton")
+  eq(clicks[1], "LeftButton")
   f:_click("RightButton")
-  eq(clicks[1], "RightButton")
+  eq(#clicks, 1, "a right click is not a click")
   f:_fire("OnLeave")
-  ok(not f.fxBg:IsShown(), "unshaded when left")
+  ok(not f.underline:IsShown(), "plain when left")
   eq(UI.tooltipOwner(), nil)
+  -- Fill: a wash behind it; a right click goes to its own menu.
+  local g = ps[2].region
+  g:_fire("OnEnter")
+  ok(g.fxBg and g.fxBg:IsShown(), "washed on hover")
+  ok(not g.underline:IsShown())
+  g:_click("RightButton")
+  eq(menus, 1, "its own menu")
+  g:_fire("OnLeave")
+  ok(not g.fxBg:IsShown())
   -- Disabled: drawn as is and not clickable.
   disabled = true
   root:update(view())
   UI.flush()
   f:_fire("OnEnter")
-  ok(not f.fxBg:IsShown(), "no shade while disabled")
+  ok(not f.underline:IsShown(), "no decoration while disabled")
   f:_click()
   eq(#clicks, 1)
-  f:_fire("OnClick", "LeftButton")
-  eq(#clicks, 1, "the handler refuses too")
   f:_fire("OnLeave")
   -- A skin paints it instead.
   local painted
@@ -1318,6 +1332,69 @@ test("list and table: right-clicking a row asks for its menu", function()
   W.cursorX, W.cursorY = -100, -100
   list.region:_fire("OnMouseUp", "RightButton")
   eq(got, nil, "nor a click outside the rows")
+  root:unmount()
+  -- Controls inside a row: a right click on them opens the row's menu,
+  -- and never runs a button.
+  local ran = 0
+  root = UI.mount(host, UI.Table {
+    items = items, key = "id", rowHeight = 30,
+    columns = {
+      { key = "item", flex = 1, render = function() return UI.ItemCell { item = 2772 } end },
+      { key = "price", width = 80, render = function(it) return UI.Pressable { onClick = function() end, UI.Text { text = tostring(it.id) } } end },
+      { key = "run", width = 60, render = function() return UI.Button { text = "Run", onClick = function() ran = ran + 1 end } end },
+    },
+    onContextMenu = function(item, i, key) got = { item, i, key } end,
+  })
+  UI.flush()
+  for _, host in ipairs({ "ItemCell", "Pressable", "Button" }) do
+    got = nil
+    find(root, host)[3].region:_click("RightButton")
+    ok(got and got[2] == 3 and got[3] == 30, host .. ": the third row's menu")
+  end
+  eq(ran, 0, "the button did not run")
+  find(root, "Button")[1].region:_click("LeftButton")
+  eq(ran, 1, "a left click still does")
+  root:unmount()
+  -- Without a row menu, a right click stays the control's.
+  local cellClicks = {}
+  root = UI.mount(host, UI.List { items = items, rowHeight = 30,
+    render = function() return UI.HStack { UI.ItemCell { item = 2772, onClick = function(_, _, _, b) cellClicks[#cellClicks + 1] = b end },
+      UI.Pressable { UI.Text { text = "x" } } } end })
+  UI.flush()
+  find(root, "ItemCell")[1].region:_click("RightButton")
+  eq(cellClicks[1], "RightButton")
+  find(root, "Pressable")[1].region:_click("RightButton")
+  root:unmount()
+  find(UI.mount(host, UI.Pressable { UI.Text { text = "alone" } }), "Pressable")[1].region:_click("RightButton")
+end)
+
+test("context menu: nothing under it reacts to the pointer", function()
+  local host = CreateFrame("Frame")
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+  host:SetSize(400, 300)
+  local items = {}
+  for i = 1, 5 do items[i] = { id = i } end
+  local root = UI.mount(host, UI.List { items = items, rowHeight = 30, onContextMenu = function() end,
+    render = function(it) return UI.Text { text = tostring(it.id) } end })
+  UI.flush()
+  local list = find(root, "List")[1]
+  local l, b, w, h = list.region:GetRect()
+  W.cursorX, W.cursorY = l + 50, b + h - 45
+  W.nextFrame()
+  eq(list.hover, 2)
+  GameTooltip:SetOwner(list.region)
+  GameTooltip:Show()
+  UI.showMenu(list.region, { { text = "One" } })
+  local hidden = not GameTooltip:IsOwned(list.region)
+  local blocks = I.menu.catcher:IsMouseEnabled()
+  W.nextFrame()
+  local hover = list.hover
+  UI.hideMenu()
+  ok(hidden, "the item tooltip under it is hidden")
+  ok(blocks, "the catcher takes the pointer")
+  eq(hover, nil, "no row hover under an open menu")
+  W.nextFrame()
+  eq(list.hover, 2)
   root:unmount()
 end)
 

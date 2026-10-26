@@ -88,22 +88,23 @@ This spec owns the behaviour of FxUI's general-purpose components: text primitiv
 
 ### Pressable
 
-- `UI.Pressable` MUST make any content a click target: it lays out its children as a vertical stack (`gap`, `padding`, `align`, `justify`), or a horizontal one with `horizontal = true`, and calls `onClick(frame, mouseButton)` on a left or right click.
-- Hovering MUST shade it in the theme's `raised` role (`radius`, default `r4`), pressing a little darker, and show its `tooltip` in the [tooltip](#tooltip); leaving MUST clear both. A skin's `paint` replaces the shade.
-- `disabled` MUST draw it unshaded and ignore clicks.
+- `UI.Pressable` MUST make any content a click target: it lays out its children as a vertical stack (`gap`, `padding`, `align`, `justify`), or a horizontal one with `horizontal = true`, and calls `onClick(frame)` on a left click.
+- A right click MUST call `onContextMenu(frame)` when given; otherwise, inside a list row whose list has a menu, it MUST open that row's menu (see [context menu](#context-menu)).
+- Hovering MUST decorate it by `hover`: `underline` (default) a 1 px line in the `gold` role under its content, from the content's left to its right edge, never a background; `fill` a `gold` wash behind it (`radius`, default `r4`), for menu items; `none` nothing. Pressing deepens it. Hovering MUST also show its `tooltip` in the [tooltip](#tooltip); leaving MUST clear both. A skin's `paint` replaces the decoration.
+- `disabled` MUST draw it undecorated and ignore left clicks.
 
 #### Scenario: Click a price
 
 - **GIVEN** a table cell showing a price over its change, wrapped in a Pressable with a tooltip
 - **WHEN** the player hovers and clicks it
-- **THEN** the cell is shaded, the tooltip shows, and `onClick` runs once
+- **THEN** the price is underlined, the tooltip shows, and `onClick` runs once
 
 ### Context menu
 
 - `UI.showMenu(owner, items, opts)` MUST show one menu at the cursor: `items` = `{ { text, onClick, disabled, tooltip } }` or `{ divider = true }`, `opts.title` a muted heading. It uses the theme's `tooltip` surface, is at least 140 px wide, every item as wide as the menu, and stays on screen.
-- An item is a [Pressable](#pressable): clicking an enabled one MUST close the menu, then run its `onClick`; a disabled one is drawn muted and does nothing.
-- A click anywhere outside the menu MUST close it (and do nothing else). `UI.hideMenu(owner)` MUST close it only while that owner shows it (any owner when nil); `UI.menuOwner()` MUST return the frame it is shown for, or nil. Showing another menu replaces it.
-- A [list](../data-components/#list) or [table](../data-components/#table) MUST call `onContextMenu(item, i, key)` when a row is right-clicked (and take the mouse for it even without `onSelect`); a left click never calls it.
+- An item is a [Pressable](#pressable) washed in `gold` on hover: clicking an enabled one MUST close the menu, then run its `onClick`; a disabled one is drawn muted and does nothing.
+- A click anywhere outside the menu MUST close it (and do nothing else). While it is open nothing under it MUST react to the pointer: opening it hides FxUI's tooltip and the client's, a full-screen layer under it takes the pointer, and polled hover (list rows, chart crosshairs) stops. `UI.hideMenu(owner)` MUST close it only while that owner shows it (any owner when nil); `UI.menuOwner()` MUST return the frame it is shown for, or nil. Showing another menu replaces it.
+- A [list](../data-components/#list) or [table](../data-components/#table) MUST call `onContextMenu(item, i, key)` when a row is right-clicked (and take the mouse for it even without `onSelect`), also when the click lands on a button, item cell or Pressable in the row: those leave a right click to the row's menu, so a right click never runs a button there. A left click never calls it.
 
 #### Scenario: Row menu
 

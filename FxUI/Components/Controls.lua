@@ -258,6 +258,9 @@ I.defineHost("Button", {
     b:SetScript("OnClick", function(self, mouseButton)
       local node = self.fxNode
       if not node then return end
+      -- In a list row with a menu, a right click opens that menu, so it
+      -- never runs the button.
+      if mouseButton == "RightButton" and I.rowContextMenu(node) then return end
       local p = node.el.props
       if not buttonEnabled(p) then return end
       if p.onClick then p.onClick(self, mouseButton) end
@@ -289,34 +292,65 @@ I.defineHost("Button", {
 -- Pressable
 ---------------------------------------------------------------------------
 
--- Hover and press shade the area in the theme's raised role (a skin's
--- paint replaces that); disabled, it is drawn as is.
+-- The hover decoration (`hover`): "underline" (default) draws a line in
+-- the gold role under the content, "fill" a gold wash behind it (for
+-- menu items), "none" nothing; pressing deepens it. A skin's paint
+-- replaces it; disabled, it is drawn as is.
 local function paintPressable(f)
   local node = f.fxNode
   if not node then return end
   local prevTheme = I.enter(node)
   local p = node.el.props
   local enabled = not p.disabled
+  local hot = enabled and (f.fxHover or f.fxPressed)
+  local mode = p.hover or "underline"
   local skin = I.skin("Pressable")
+  I.clearSurface(f)
+  f.underline:Hide()
   if skin and skin.paint then
     skin.paint(f, p, { hover = f.fxHover and enabled, pressed = f.fxPressed and enabled, enabled = enabled })
-  elseif enabled and (f.fxHover or f.fxPressed) then
-    I.applySurface(f, f.fxPressed and I.mix("raised", BLACK, 0.15) or "raised", nil, p.radius or "r4")
-  else
-    I.clearSurface(f)
+  elseif hot and mode == "fill" then
+    I.applySurface(f, "gold", nil, p.radius or "r4", f.fxPressed and 0.28 or 0.16)
+  elseif hot and mode == "underline" then
+    f.underline:SetColorTexture(I.rgba(f.fxPressed and "muted" or "gold"))
+    f.underline:Show()
   end
   I.leave(prevTheme)
 end
 
+-- Under the laid-out content: from its leftmost to its rightmost child, at
+-- the bottom of the lowest.
+local function placeUnderline(node)
+  local left, right, bottom
+  for _, c in ipairs(node.children or {}) do
+    local h = c
+    while h and h.def do h = h.child end
+    if h and h.x and h.w and h.w > 0 then
+      left = math.min(left or h.x, h.x)
+      right = math.max(right or (h.x + h.w), h.x + h.w)
+      bottom = math.max(bottom or (h.y + h.h), h.y + h.h)
+    end
+  end
+  local line = node.region.underline
+  line:ClearAllPoints()
+  if not left then return end
+  line:SetPoint("TOPLEFT", node.region, "TOPLEFT", left, -bottom)
+  line:SetSize(right - left, 1)
+end
+
 -- Any content as a click target: its children are laid out as a VStack
 -- (gap, padding, align, justify), or an HStack with horizontal = true.
--- Props: onClick(frame, mouseButton), disabled, tooltip, radius.
+-- Props: onClick(frame) on a left click, onContextMenu(frame) on a right
+-- click (in a list row with a menu and without its own, that row's menu),
+-- disabled, tooltip, hover (underline|fill|none), radius.
 I.defineHost("Pressable", {
   container = true,
   create = function(holder)
     local f = CreateFrame("Button", nil, holder)
     f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     f:SetMotionScriptsWhileDisabled(true)
+    f.underline = f:CreateTexture(nil, "OVERLAY")
+    f.underline:Hide()
     f:SetScript("OnEnter", function(self)
       self.fxHover = true
       paintPressable(self)
@@ -340,12 +374,21 @@ I.defineHost("Pressable", {
       local node = self.fxNode
       if not node then return end
       local p = node.el.props
+      if mouseButton == "RightButton" then
+        if p.onContextMenu then
+          if not p.disabled then p.onContextMenu(self) end
+        else
+          I.rowContextMenu(node)
+        end
+        return
+      end
       if not p.disabled and p.onClick then p.onClick(self, mouseButton) end
     end)
     return f
   end,
   update = function(node, p)
-    if p.disabled then node.region:Disable() else node.region:Enable() end
+    -- Enabled even when disabled, so a right click still reaches the row.
+    node.region:Enable()
     paintPressable(node.region)
   end,
   measure = function(node, maxW, maxH)
@@ -353,11 +396,13 @@ I.defineHost("Pressable", {
   end,
   layout = function(node, w, h)
     I.stackLayout(node.children, node.el.props, node.el.props.horizontal, w, h)
+    placeUnderline(node)
   end,
   release = function(node)
     local f = node.region
     f.fxHover, f.fxPressed = false, false
     I.clearSurface(f)
+    f.underline:Hide()
     hideTooltip(f)
   end,
 })
@@ -378,6 +423,7 @@ local MenuView = I.defineComponent("FxMenu", function(props)
       body[#body + 1] = UI.Divider {}
     else
       body[#body + 1] = UI.Pressable {
+        hover = "fill",
         padding = { 5, 8 },
         disabled = item.disabled,
         tooltip = item.tooltip,
@@ -408,6 +454,7 @@ function UI.showMenu(owner, items, opts)
     local catcher = CreateFrame("Button", nil, UIParent)
     catcher:SetAllPoints(UIParent)
     catcher:SetFrameStrata("FULLSCREEN_DIALOG")
+    catcher:EnableMouse(true)
     catcher:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     catcher:SetScript("OnClick", function() UI.hideMenu() end)
     catcher:Hide()
@@ -429,7 +476,9 @@ function UI.showMenu(owner, items, opts)
   local scale = host:GetEffectiveScale()
   host:ClearAllPoints()
   host:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale, y / scale)
+  -- Nothing under the menu keeps showing what the pointer was over.
   UI.hideTooltip()
+  if GameTooltip then GameTooltip:Hide() end
   MN.owner = owner
   MN.catcher:Show()
   host:Show()
