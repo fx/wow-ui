@@ -170,6 +170,16 @@ local ControlsPage = UI.component("DemoControls", {
             UI.Help { text = "Text alone, without a title." },
           },
         }),
+        Card("Pressable", {
+          Row { gap = 8,
+            UI.Pressable { tooltip = "Any content can be a click target.", padding = { 2, 6 }, align = "end",
+              onClick = function() ctx:setState({ pressed = (s.pressed or 0) + 1 }) end,
+              UI.Money { value = 1234500 },
+              UI.Text { text = "clicked " .. (s.pressed or 0) .. "\195\151", style = "small", color = "muted" },
+            },
+            UI.Pressable { disabled = true, padding = { 2, 6 }, UI.Text { text = "Disabled", color = "muted" } },
+          },
+        }),
         Card("Sliders", {
           UI.Slider { label = "At least", values = { 0, 10000, 50000, 100000, 500000, 1000000, 5000000 }, value = s.minPrice,
             format = function(v) return UI.formatMoney(v, { short = true }) end,

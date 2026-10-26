@@ -286,6 +286,83 @@ I.defineHost("Button", {
 })
 
 ---------------------------------------------------------------------------
+-- Pressable
+---------------------------------------------------------------------------
+
+-- Hover and press shade the area in the theme's raised role (a skin's
+-- paint replaces that); disabled, it is drawn as is.
+local function paintPressable(f)
+  local node = f.fxNode
+  if not node then return end
+  local prevTheme = I.enter(node)
+  local p = node.el.props
+  local enabled = not p.disabled
+  local skin = I.skin("Pressable")
+  if skin and skin.paint then
+    skin.paint(f, p, { hover = f.fxHover and enabled, pressed = f.fxPressed and enabled, enabled = enabled })
+  elseif enabled and (f.fxHover or f.fxPressed) then
+    I.applySurface(f, f.fxPressed and I.mix("raised", BLACK, 0.15) or "raised", nil, p.radius or "r4")
+  else
+    I.clearSurface(f)
+  end
+  I.leave(prevTheme)
+end
+
+-- Any content as a click target: its children are laid out as a VStack
+-- (gap, padding, align, justify), or an HStack with horizontal = true.
+-- Props: onClick(frame, mouseButton), disabled, tooltip, radius.
+I.defineHost("Pressable", {
+  container = true,
+  create = function(holder)
+    local f = CreateFrame("Button", nil, holder)
+    f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    f:SetMotionScriptsWhileDisabled(true)
+    f:SetScript("OnEnter", function(self)
+      self.fxHover = true
+      paintPressable(self)
+      local node = self.fxNode
+      if node then showTooltip(self, node.el.props.tooltip) end
+    end)
+    f:SetScript("OnLeave", function(self)
+      self.fxHover, self.fxPressed = false, false
+      paintPressable(self)
+      hideTooltip(self)
+    end)
+    f:SetScript("OnMouseDown", function(self)
+      self.fxPressed = true
+      paintPressable(self)
+    end)
+    f:SetScript("OnMouseUp", function(self)
+      self.fxPressed = false
+      paintPressable(self)
+    end)
+    f:SetScript("OnClick", function(self, mouseButton)
+      local node = self.fxNode
+      if not node then return end
+      local p = node.el.props
+      if not p.disabled and p.onClick then p.onClick(self, mouseButton) end
+    end)
+    return f
+  end,
+  update = function(node, p)
+    if p.disabled then node.region:Disable() else node.region:Enable() end
+    paintPressable(node.region)
+  end,
+  measure = function(node, maxW, maxH)
+    return I.stackMeasure(node.children, node.el.props, node.el.props.horizontal, maxW, maxH)
+  end,
+  layout = function(node, w, h)
+    I.stackLayout(node.children, node.el.props, node.el.props.horizontal, w, h)
+  end,
+  release = function(node)
+    local f = node.region
+    f.fxHover, f.fxPressed = false, false
+    I.clearSurface(f)
+    hideTooltip(f)
+  end,
+})
+
+---------------------------------------------------------------------------
 -- Badge
 ---------------------------------------------------------------------------
 

@@ -1191,6 +1191,64 @@ test("tooltip and help: themed, sized to content, above or below its owner, one 
   eq(UI.tooltipOwner(), nil, "hidden for any owner")
 end)
 
+test("pressable: any content as a click target, shaded on hover and press, with a tooltip", function()
+  local host = CreateFrame("Frame", nil, UIParent)
+  host:SetSize(300, 100)
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 100, -300)
+  local clicks, disabled = {}, false
+  local function view()
+    return UI.HStack { gap = 8,
+      UI.Pressable { padding = { 2, 6 }, gap = 2, tooltip = "Search it", disabled = disabled,
+        onClick = function(_, b) clicks[#clicks + 1] = b end,
+        UI.Text { text = "First line" },
+        UI.Text { text = "Second", style = "small" },
+      },
+      UI.Pressable { horizontal = true, gap = 4, UI.Text { text = "A" }, UI.Text { text = "B" } },
+    }
+  end
+  local root = UI.mount(host, view())
+  UI.flush()
+  local ps = find(root, "Pressable")
+  local p, texts = ps[1], find({ node = ps[1] }, "Text")
+  local t1, t2 = texts[1], texts[2]
+  eq(p.h, 4 + t1.h + 2 + t2.h, "a column of its children with its padding and gap")
+  eq(p.w, 12 + math.max(t1.w, t2.w))
+  local row = find({ node = ps[2] }, "Text")
+  eq(ps[2].w, row[1].w + 4 + row[2].w, "or a row")
+  local f = p.region
+  ok(not (f.fxBg and f.fxBg:IsShown()), "unshaded at rest")
+  f:_fire("OnEnter")
+  ok(f.fxBg:IsShown(), "shaded on hover")
+  eq(UI.tooltipOwner(), f, "its tooltip")
+  f:_fire("OnMouseDown")
+  f:_fire("OnMouseUp")
+  f:_click("RightButton")
+  eq(clicks[1], "RightButton")
+  f:_fire("OnLeave")
+  ok(not f.fxBg:IsShown(), "unshaded when left")
+  eq(UI.tooltipOwner(), nil)
+  -- Disabled: drawn as is and not clickable.
+  disabled = true
+  root:update(view())
+  UI.flush()
+  f:_fire("OnEnter")
+  ok(not f.fxBg:IsShown(), "no shade while disabled")
+  f:_click()
+  eq(#clicks, 1)
+  f:_fire("OnClick", "LeftButton")
+  eq(#clicks, 1, "the handler refuses too")
+  f:_fire("OnLeave")
+  -- A skin paints it instead.
+  local painted
+  local skinOf = I.skin
+  I.skin = function(name) if name == "Pressable" then return { paint = function(_, _, st) painted = st end } end return skinOf(name) end
+  f:_fire("OnEnter")
+  I.skin = skinOf
+  ok(painted and painted.enabled == false and painted.hover == false, "the skin gets the state")
+  f:_fire("OnLeave")
+  root:unmount()
+end)
+
 test("controls: button variants, hover and press, busy, tooltip; badges; toggles", function()
   local host = CreateFrame("Frame")
   host:SetSize(600, 100)

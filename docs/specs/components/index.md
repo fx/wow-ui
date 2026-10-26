@@ -86,6 +86,18 @@ This spec owns the behaviour of FxUI's general-purpose components: text primitiv
 - **WHEN** the player hovers the icon
 - **THEN** the tooltip shows that text, above the icon, and hides when the cursor leaves
 
+### Pressable
+
+- `UI.Pressable` MUST make any content a click target: it lays out its children as a vertical stack (`gap`, `padding`, `align`, `justify`), or a horizontal one with `horizontal = true`, and calls `onClick(frame, mouseButton)` on a left or right click.
+- Hovering MUST shade it in the theme's `raised` role (`radius`, default `r4`), pressing a little darker, and show its `tooltip` in the [tooltip](#tooltip); leaving MUST clear both. A skin's `paint` replaces the shade.
+- `disabled` MUST draw it unshaded and ignore clicks.
+
+#### Scenario: Click a price
+
+- **GIVEN** a table cell showing a price over its change, wrapped in a Pressable with a tooltip
+- **WHEN** the player hovers and clicks it
+- **THEN** the cell is shaded, the tooltip shows, and `onClick` runs once
+
 ### Tabs
 
 - `UI.TabBar` MUST draw a row of tabs from `tabs = { { id, text, count } }` with `selected` (an id) and call `onSelect(id)` when a tab is clicked; `padding` sets the row's padding.
@@ -169,6 +181,7 @@ Each component publishes what a skin receives ([theming](../theming/) owns the s
 | Badge | `paint(frame, props, toneToken)` | `frame.label` with text set |
 | Toggle | `paint(button, props, state)` | `state = { hover, checked, enabled }`; `button.track`, `.knob`, `.label` |
 | Help | `paint(frame, props, state)` | `state = { hover }`; `frame.circle`, `.mark` |
+| Pressable | `paint(frame, props, state)` | `state = { hover, pressed, enabled }` |
 | Slider | `paint(frame, props, state)` | `state = { hover, dragging, enabled, fraction }`; `frame.track`, `.fill`, `.knob`, `.label`, `.valueText` (FxUI places the knob and sizes the fill) |
 | Tab | `paint(button, props, state)`, `paintRail(segment)`, `railGap(tabButton)` | `state = { hover, selected }`; `button.label`, `.count`, `.underline` |
 | Window | `paint(frame, props, size)`, `paintClose(button, hover)`, `paintFooter(footer)` | `frame.header`, `.title`, `.headerFoot`, `.headerLine`, `.grip` |
@@ -199,3 +212,4 @@ The toast stack is an FxUI tree mounted once, on first use, in a `DIALOG`-strata
 | 2026-10-26 | Initial spec created from the implementation (the planned component table previously in the architecture spec) | [0001-fxui-core](../../changes/0001-fxui-core.md) |
 | 2026-10-26 | Slider | [0004-slider](../../changes/0004-slider.md) |
 | 2026-10-26 | Tooltip and help icon; buttons and sliders use the tooltip | [0005-tooltip-help](../../changes/0005-tooltip-help.md) |
+| 2026-10-26 | Pressable | [0006-pressable](../../changes/0006-pressable.md) |

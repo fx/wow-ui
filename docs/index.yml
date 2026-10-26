@@ -75,3 +75,10 @@ changes:
     spec: components
     status: complete
     depends_on: ["0001"]
+  - id: "0006"
+    name: pressable
+    path: changes/0006-pressable.md
+    description: UI.Pressable, any content as a click target with hover shade and tooltip
+    spec: components
+    status: in-progress
+    depends_on: ["0005"]
