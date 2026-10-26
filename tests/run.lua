@@ -1648,6 +1648,34 @@ test("chart: onHover fires once per hovered point, even when it re-renders the c
   root:unmount()
 end)
 
+test("theme: every theme gets its own font objects, whatever its name", function()
+  local function body(size) return { fonts = { body = { file = "Inter-Regular.ttf", size = size } } } end
+  UI.registerTheme("t-font-a-b", "default", body(12))
+  UI.registerTheme("t-font-a_b", "default", body(24))
+  local dash, under = I.resolve("t-font-a-b"), I.resolve("t-font-a_b")
+  ok(dash.fonts.body ~= under.fonts.body, "names that differ only in punctuation get distinct fonts")
+  eq(select(2, dash.fonts.body:GetFont()), 12, "resolving the second keeps the first's size")
+  eq(select(2, under.fonts.body:GetFont()), 24)
+
+  -- An unregistered table never shares fonts with a registered theme,
+  -- whatever that theme is called.
+  local nextName = "custom" .. (I.nextThemeId + 1)
+  UI.registerTheme(nextName, "default", body(14))
+  local named = I.resolve(nextName)
+  local anon = I.resolve(body(30))
+  ok(anon.fonts.body ~= named.fonts.body, "a table's fonts are its own")
+  eq(select(2, named.fonts.body:GetFont()), 14, "the registered theme keeps its size")
+  eq(select(2, anon.fonts.body:GetFont()), 30)
+
+  -- Re-registering a name keeps that theme's font objects.
+  local before = dash.fonts.body
+  UI.registerTheme("t-font-a-b", "default", body(16))
+  local again = I.resolve("t-font-a-b")
+  ok(again.fonts.body == before, "the same font object after re-registration")
+  eq(select(2, before:GetFont()), 16)
+  eq(select(2, I.resolve("t-font-a_b").fonts.body:GetFont()), 24, "the other theme is untouched")
+end)
+
 ---------------------------------------------------------------------------
 
 for _, t in ipairs(tests) do

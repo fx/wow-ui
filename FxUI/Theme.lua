@@ -45,10 +45,26 @@ UI.themes = UI.themes or {}
 I.resolved = I.wipe(I.resolved or {})
 I.resolvedTables = I.resolvedTables or setmetatable({}, { __mode = "k" })
 I.themeGen = (I.themeGen or 0) + 1
+-- Font identities: every registered name and every unregistered table gets a
+-- number of its own from one counter, and its font objects are named
+-- FxUIFont<n>_<token>. Nothing is derived from the theme's name, so no two
+-- themes can share a font object. Both live on the shared state, so a newer
+-- copy keeps the identities (and font objects) an older one handed out.
 I.nextThemeId = I.nextThemeId or 0
+I.themeFontIds = I.themeFontIds or {}
 
-local function safeId(name)
-  return (tostring(name):gsub("[^%w]", "_"))
+local function newThemeId()
+  I.nextThemeId = I.nextThemeId + 1
+  return I.nextThemeId
+end
+
+local function namedThemeId(name)
+  local id = I.themeFontIds[name]
+  if not id then
+    id = newThemeId()
+    I.themeFontIds[name] = id
+  end
+  return id
 end
 
 local function applyFont(obj, spec)
@@ -73,12 +89,13 @@ end
 -- Flatten a definition with everything it inherits into a resolved theme:
 -- color tokens as color tables at the top level (theme.gold), plus fonts
 -- (font objects), fontSpecs, surfaces, skins, metrics, money, space, radius.
-local function flatten(def, id)
+local function flatten(def, id, fallbackName)
   local base
   if def.base ~= false and def.name ~= "default" then
     base = I.resolve(def.base or "default")
   end
-  local t = { name = def.name or id, title = def.title or def.name or id, def = def, id = id }
+  local name = def.name or fallbackName or ("custom" .. id)
+  local t = { name = name, title = def.title or name, def = def, id = id }
 
   if base then
     for k, v in pairs(base) do
@@ -90,7 +107,7 @@ local function flatten(def, id)
   t.fontSpecs = mergeTables(base and base.fontSpecs, def.fonts)
   t.fonts = {}
   for token, spec in pairs(t.fontSpecs) do
-    local fontName = "FxUIFont_" .. safeId(id) .. "_" .. token
+    local fontName = "FxUIFont" .. id .. "_" .. tostring(token)
     local obj = _G[fontName] or CreateFont(fontName)
     applyFont(obj, spec)
     t.fonts[token] = obj
@@ -122,11 +139,7 @@ function I.resolve(ref)
     if ref.fonts and ref.fontSpecs then return ref end -- already resolved
     local t = I.resolvedTables[ref]
     if not t or t.gen ~= I.themeGen then
-      local id = t and t.id
-      if not id then
-        I.nextThemeId = I.nextThemeId + 1
-        id = "custom" .. I.nextThemeId
-      end
+      local id = t and type(t.id) == "number" and t.id or newThemeId()
       t = flatten(ref, id)
       t.gen = I.themeGen
       I.resolvedTables[ref] = t
@@ -144,7 +157,7 @@ function I.resolve(ref)
     end
     return I.global or I.resolve("default")
   end
-  t = flatten(def, ref)
+  t = flatten(def, namedThemeId(ref), ref)
   I.resolved[ref] = t
   return t
 end
