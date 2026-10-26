@@ -2580,7 +2580,7 @@ test("classic: every component draws with client art in every state; pooled regi
   eq(on.fxSkinTex.box._texture, "Interface\\Buttons\\UI-CheckBox-Up", "checkbox")
   eq(on.fxSkinTex.check._texture, "Interface\\Buttons\\UI-CheckBox-Check", "check")
   eq(disabled.fxSkinTex.check._texture, "Interface\\Buttons\\UI-CheckBox-Check-Disabled", "disabled check")
-  ok(not disabled.fxSkinTex.hl:IsShown(), "no highlight when disabled")
+  ok(not (disabled.fxSkinTex.hl and disabled.fxSkinTex.hl:IsShown()), "no highlight when disabled")
   eq(disabled.label._color[1], 0x80 / 255, "gray label when disabled")
 
   -- Tabs: the count is centred with the label; hover lightens an inactive tab.
@@ -2810,6 +2810,72 @@ test("classic: missing client art falls back to flat drawing and is reported onc
   root = UI.mount(host, UI.VStack { surface = "card", UI.Text { text = "card" } }, { theme = "classic" })
   ok(find(root, "VStack")[1].region.fxHasBackdrop, "tooltip card again once the art is there")
   root:unmount()
+end)
+
+test("classic: missing secondary art while the primary art ships falls back per file and is reported once", function()
+  -- The primary files ship; only the secondary ones (check marks and
+  -- highlights) are missing.
+  local secondary = {
+    "Interface\\Buttons\\UI-CheckBox-Check", "Interface\\Buttons\\UI-CheckBox-Check-Disabled",
+    "Interface\\Buttons\\UI-CheckBox-Highlight", "Interface\\Buttons\\UI-Panel-Button-Highlight",
+    "Interface\\PaperDollInfoFrame\\UI-Character-Tab-Highlight", "Interface\\Buttons\\UI-Panel-MinimizeButton-Highlight",
+  }
+  W.missingFiles = {}
+  for _, p in ipairs(secondary) do W.missingFiles[p] = true end
+  I.wipe(I.textureCache)
+  local items = { { id = 1, v = "a" }, { id = 2, v = "b" } }
+  local function view()
+    return UI.Window { title = "Secondary", width = 400, height = 300, theme = "classic",
+      UI.HStack { gap = 4, UI.Button { text = "Go" },
+        UI.Toggle { label = "On", checked = true },
+        UI.Toggle { label = "Off", checked = true, disabled = true } },
+      UI.TabBar { tabs = { { id = "x", text = "One" }, { id = "y", text = "Two" } }, selected = "x" },
+      UI.Table { flex = 1, items = items, key = "id", columns = { { key = "v", title = "Value", flex = 1 } } },
+    }
+  end
+  local root = UI.mount(UIParent, view())
+  -- Toggle: the box art stays, the check is drawn flat inside it.
+  local toggles = find(root, "Toggle")
+  local on, off = toggles[1].region.fxSkinTex, toggles[2].region.fxSkinTex
+  eq(on.box._texture, "Interface\\Buttons\\UI-CheckBox-Up", "box art kept")
+  ok(on.check:IsShown(), "a checked toggle still shows its check")
+  ok(on.check._color and on.check._texture == nil, "check drawn flat")
+  near(on.check._color[2], 0xD1 / 255, "in gold")
+  ok(on.check._w and on.check._w < on.box._w, "inside the box, not covering it")
+  ok(off.check:IsShown() and off.check._color and off.check._texture == nil, "disabled check drawn flat")
+  near(off.check._color[1], 0x80 / 255, "in gray")
+  ok(not (on.hl and on.hl:IsShown()), "checkbox highlight hidden")
+  -- Button: panel slices, no highlight.
+  local b = find(root, "Button", function(n) return n.el.props.text == "Go" end)[1].region
+  ok(b.fxSkinTex.bgM:IsShown(), "button art kept")
+  ok(not (b.fxSkinTex.hl and b.fxSkinTex.hl:IsShown()), "button highlight hidden")
+  -- Tabs: tab art, no highlight on the inactive tab.
+  local tab = find(root, "Tab")[2].region
+  ok(tab.fxSkinTex.onM:IsShown(), "tab art kept")
+  ok(not (tab.fxSkinTex.hl and tab.fxSkinTex.hl:IsShown()), "tab highlight hidden")
+  -- Table header: column art, no highlight.
+  local header = find(root, "HeaderCell")[1].region
+  ok(header.fxSkinTex.colM:IsShown(), "column art kept")
+  ok(not (header.fxSkinTex.hl and header.fxSkinTex.hl:IsShown()), "header highlight hidden")
+  -- Close button: art, no highlight.
+  local close = find(root, "Window")[1].region.close
+  eq(close.fxSkinTex.up._texture, "Interface\\Buttons\\UI-Panel-MinimizeButton-Up", "close art kept")
+  ok(not (close.fxSkinTex.hl and close.fxSkinTex.hl:IsShown()), "close highlight hidden")
+  -- Each missing file reported exactly once.
+  local reported = {}
+  for _, e in ipairs(W.errors) do
+    local path = e:match("^FxUI Classic: the client has no (.-); using FxUI's own drawing for it$")
+    ok(path, "reported as a missing file: " .. e)
+    ok(not reported[path], "reported once: " .. path)
+    reported[path] = true
+  end
+  for _, p in ipairs(secondary) do ok(reported[p], "reported: " .. p) end
+  W.errors = {}
+  root:update(view())
+  eq(#W.errors, 0, "nothing reported again")
+  root:unmount()
+  W.missingFiles = nil
+  I.wipe(I.textureCache)
 end)
 
 test("classic: layout invariants hold over representative trees at several sizes", function()

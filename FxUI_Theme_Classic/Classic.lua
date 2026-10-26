@@ -76,10 +76,12 @@ local function backdropShips(def)
 end
 
 -- A classic backdrop, only when the client ships its files; false
--- otherwise, so the caller draws FxUI's own surface instead.
+-- otherwise (with any earlier backdrop removed), so the caller draws FxUI's
+-- own surface instead.
 local function backdrop(frame, def, bg, border)
-  if not backdropShips(def) then return false end
-  return K.backdrop(frame, def, bg, border)
+  if backdropShips(def) and K.backdrop(frame, def, bg, border) then return true end
+  K.clear(frame)
+  return false
 end
 
 local GOLD, WHITE, GRAY = "#FFD100", "#FFFFFF", "#808080"
@@ -106,6 +108,27 @@ local function threeSlice(frame, prefix, file, layer, capW, u1, u2, u3, u4, v1, 
   m:SetPoint("TOPLEFT", l, "TOPRIGHT")
   m:SetPoint("BOTTOMRIGHT", r, "BOTTOMLEFT")
   return l, m, r
+end
+
+-- Hide one skin texture if the frame has it.
+local function hide(frame, key)
+  local t = frame.fxSkinTex and frame.fxSkinTex[key]
+  if t then t:Hide() end
+end
+
+-- An additive highlight texture filling `anchor` (default the frame), only
+-- when the client ships its file and `shown` holds; hidden otherwise.
+local function highlight(frame, file, shown, anchor)
+  if not (shown and has(file)) then
+    hide(frame, "hl")
+    return nil
+  end
+  local hl = K.texture(frame, "hl", "HIGHLIGHT")
+  hl:SetTexture(file)
+  hl:SetBlendMode("ADD")
+  hl:ClearAllPoints()
+  hl:SetAllPoints(anchor or frame)
+  return hl
 end
 
 local function hideSlices(frame, prefix)
@@ -135,15 +158,11 @@ skins.Button = {
     if has(file) then
       -- The art fills the left 80x22 of a 128x32 file.
       threeSlice(b, "bg", file, "BACKGROUND", 12, 0, 0.09375, 0.53125, 0.625, 0, 0.6875)
-      local hl = K.texture(b, "hl", "HIGHLIGHT")
-      hl:SetTexture(T.buttonHighlight)
-      hl:SetTexCoord(0, 0.625, 0, 0.6875)
-      hl:SetBlendMode("ADD")
-      hl:ClearAllPoints()
-      hl:SetAllPoints()
-      hl:SetShown(st.enabled)
+      local hl = highlight(b, T.buttonHighlight, st.enabled)
+      if hl then hl:SetTexCoord(0, 0.625, 0, 0.6875) end
     else
       hideSlices(b, "bg")
+      hide(b, "hl")
       K.surface(b, st.pressed and "#5A0A0A" or "#7A1010", "#3A0000", 4)
     end
     label:SetTextColor(K.color(st.enabled and (st.hover and WHITE or GOLD) or GRAY))
@@ -162,22 +181,29 @@ skins.Toggle = {
     box:SetSize(24, 24)
     local check = K.texture(b, "check", "OVERLAY")
     check:ClearAllPoints()
-    check:SetAllPoints(box)
-    local hl = K.texture(b, "hl", "HIGHLIGHT")
-    hl:ClearAllPoints()
-    hl:SetAllPoints(box)
+    check:SetVertexColor(1, 1, 1, 1)
+    -- Box, check and highlight are separate files, each probed on its own.
+    local checkFile = st.enabled and T.check or T.checkDisabled
     if has(T.checkUp) then
       box:SetTexture(T.checkUp)
       box:SetVertexColor(1, 1, 1, 1)
-      check:SetTexture(st.enabled and T.check or T.checkDisabled)
-      hl:SetTexture(T.checkHighlight)
-      hl:SetBlendMode("ADD")
+      if has(checkFile) then
+        check:SetTexture(checkFile)
+        check:SetAllPoints(box)
+      else
+        -- A flat mark inside the box art, not over it.
+        check:SetColorTexture(K.color(st.enabled and GOLD or GRAY))
+        check:SetPoint("CENTER", box)
+        check:SetSize(10, 10)
+      end
+      highlight(b, T.checkHighlight, st.enabled, box)
     else
       box:SetColorTexture(0.1, 0.1, 0.1, 1)
       check:SetColorTexture(K.color(GOLD))
+      check:SetAllPoints(box)
+      hide(b, "hl")
     end
     check:SetShown(st.checked)
-    hl:SetShown(st.enabled)
     b.label:SetTextColor(K.color(st.enabled and WHITE or GRAY))
   end,
 }
@@ -231,16 +257,16 @@ skins.Tab = {
       local shade = st.selected and 1 or (st.hover and 0.85 or 0.65)
       for _, k in ipairs({ "onL", "onM", "onR" }) do b.fxSkinTex[k]:SetVertexColor(shade, shade, shade, 1) end
       hideSlices(b, "off")
-      local hl = K.texture(b, "hl", "HIGHLIGHT")
-      hl:SetTexture(T.tabHighlight)
-      hl:SetBlendMode("ADD")
-      hl:ClearAllPoints()
-      hl:SetPoint("LEFT", b, "LEFT", 10, -4)
-      hl:SetPoint("RIGHT", b, "RIGHT", -10, -4)
-      hl:SetShown(not st.selected)
+      local hl = highlight(b, T.tabHighlight, not st.selected)
+      if hl then
+        hl:ClearAllPoints()
+        hl:SetPoint("LEFT", b, "LEFT", 10, -4)
+        hl:SetPoint("RIGHT", b, "RIGHT", -10, -4)
+      end
     else
       hideSlices(b, "on")
       hideSlices(b, "off")
+      hide(b, "hl")
       K.surface(b, st.selected and "#2A2A2A" or "#141414", "#5A4A2A", 4)
     end
     -- Centre label and count together, 2 px above the art's centre (the
@@ -261,21 +287,23 @@ skins.Tab = {
   end,
   -- The rail is the top edge of a tooltip border, clipped by its segment.
   paintRail = function(seg)
-    if not has(T.tooltipBorder) then
-      seg.fill:Show()
-      seg.fill:SetColorTexture(0.4, 0.4, 0.4, 1)
-      return
-    end
     local inner = seg.fxInner
-    if not inner then
-      inner = CreateFrame("Frame", nil, seg)
-      seg.fxInner = inner
+    if backdropShips(EDGE) then
+      if not inner then
+        inner = CreateFrame("Frame", nil, seg)
+        seg.fxInner = inner
+      end
+      inner:ClearAllPoints()
+      inner:SetPoint("TOPLEFT", seg, "TOPLEFT", -16, 0)
+      inner:SetPoint("BOTTOMRIGHT", seg, "BOTTOMRIGHT", 16, -32)
+      if backdrop(inner, EDGE, nil, "#999999") then
+        inner:Show()
+        return
+      end
     end
-    inner:Show()
-    inner:ClearAllPoints()
-    inner:SetPoint("TOPLEFT", seg, "TOPLEFT", -16, 0)
-    inner:SetPoint("BOTTOMRIGHT", seg, "BOTTOMRIGHT", 16, -32)
-    K.backdrop(inner, EDGE, nil, "#999999")
+    if inner then inner:Hide() end
+    seg.fill:Show()
+    seg.fill:SetColorTexture(0.4, 0.4, 0.4, 1)
   end,
 }
 
@@ -318,16 +346,13 @@ skins.Window = {
     local up = K.texture(button, "up", "ARTWORK")
     up:ClearAllPoints()
     up:SetAllPoints()
+    up:SetVertexColor(1, 1, 1, 1)
     if has(T.closeUp) then
       up:SetTexture(T.closeUp)
-      up:SetVertexColor(1, 1, 1, 1)
-      local hl = K.texture(button, "hl", "HIGHLIGHT")
-      hl:SetTexture(T.closeHighlight)
-      hl:SetBlendMode("ADD")
-      hl:ClearAllPoints()
-      hl:SetAllPoints()
+      highlight(button, T.closeHighlight, true)
     else
       up:SetColorTexture(0.6, 0.1, 0.1, hover and 1 or 0.8)
+      hide(button, "hl")
     end
   end,
 }
@@ -359,7 +384,11 @@ skins.Meter = {
 skins.Scroll = {
   paintThumb = function(thumb, hot)
     if thumb.track then thumb.track:SetVertexColor(0, 0, 0, 0.45) end
-    if not has(T.knob) then return end
+    if not has(T.knob) then
+      hide(thumb, "knob")
+      thumb.tex:Show()
+      return
+    end
     thumb.tex:Hide()
     local knob = K.texture(thumb, "knob", "OVERLAY")
     knob:SetTexture(T.knob)
@@ -383,12 +412,14 @@ skins.Badge = {
     if p.solid then
       -- A darkened tone with white text stays readable for every tone.
       local fill = K.mix(tone, "#000000", 0.55)
-      if not backdrop(f, THIN, fill) then K.surface(f, fill, nil, 4) end
-      if f.SetBackdropBorderColor then f:SetBackdropBorderColor(r, g, b, 1) end
+      if backdrop(f, THIN, fill) then f:SetBackdropBorderColor(r, g, b, 1) else K.surface(f, fill, nil, 4) end
       f.label:SetTextColor(1, 1, 1, 1)
     else
-      if not backdrop(f, THIN, "#000000CC") then K.surface(f, "#000000", nil, 4) end
-      if f.SetBackdropBorderColor then f:SetBackdropBorderColor(r * 0.8, g * 0.8, b * 0.8, 1) end
+      if backdrop(f, THIN, "#000000CC") then
+        f:SetBackdropBorderColor(r * 0.8, g * 0.8, b * 0.8, 1)
+      else
+        K.surface(f, "#000000", nil, 4)
+      end
       f.label:SetTextColor(r, g, b, 1)
     end
     f.label:SetFontObject(UI.font("small"))
@@ -439,13 +470,10 @@ skins.HeaderCell = {
       r:SetPoint("TOPRIGHT"); r:SetPoint("BOTTOMRIGHT"); r:SetWidth(4)
       m:SetPoint("TOPLEFT", l, "TOPRIGHT")
       m:SetPoint("BOTTOMRIGHT", r, "BOTTOMLEFT")
-      if p.sortable then
-        local hl = K.texture(b, "hl", "HIGHLIGHT")
-        hl:SetTexture(T.tabHighlight)
-        hl:SetBlendMode("ADD")
-        hl:ClearAllPoints()
-        hl:SetAllPoints()
-      end
+      highlight(b, T.tabHighlight, p.sortable)
+    else
+      hideSlices(b, "col")
+      hide(b, "hl")
     end
     b.label:SetFontObject(UI.font("small"))
     b.label:SetTextColor(K.color(st.active and GOLD or WHITE))
@@ -476,8 +504,11 @@ skins.Chart = {
     if kind == "last" then
       -- Like a badge: tone border and tone text on black.
       local r, g, b = K.color(bg)
-      if not backdrop(t, THIN, "#000000E6") then K.surface(t, "#000000", bg, 2) end
-      if t.SetBackdropBorderColor then t:SetBackdropBorderColor(r * 0.8, g * 0.8, b * 0.8, 1) end
+      if backdrop(t, THIN, "#000000E6") then
+        t:SetBackdropBorderColor(r * 0.8, g * 0.8, b * 0.8, 1)
+      else
+        K.surface(t, "#000000", bg, 2)
+      end
       t.text:SetTextColor(r, g, b, 1)
     else
       if not backdrop(t, THIN, "#000000E6", "#909090") then K.surface(t, "#000000", "#909090", 2) end

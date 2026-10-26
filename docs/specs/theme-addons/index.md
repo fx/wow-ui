@@ -78,6 +78,7 @@ Classic MUST draw each component with client art as follows, keeping the behavio
 ### Classic: missing art
 
 - Before drawing with a client file, Classic MUST check that the client ships it; for a missing file it MUST draw that part with FxUI's own or flat drawing and report the file once through the error handler ("FxUI Classic: the client has no <path>; using FxUI's own drawing for it").
+- Classic MUST check each file on its own, secondary art (check marks, highlights) included: a missing secondary file MUST NOT take the primary art with it, and the part it draws MUST fall back or be left out on its own.
 - Classic MUST only use client art that still ships in the retail client.
 
 #### Scenario: Missing button art
@@ -85,6 +86,12 @@ Classic MUST draw each component with client art as follows, keeping the behavio
 - **GIVEN** the client lacks the panel-button texture
 - **WHEN** a Classic button renders
 - **THEN** it draws a flat background and the missing path is reported once
+
+#### Scenario: Missing check mark
+
+- **GIVEN** the client ships the checkbox but not its check-mark or highlight textures
+- **WHEN** a checked Classic toggle renders
+- **THEN** it keeps the checkbox art with a flat check inside it (gold, gray when disabled), shows no highlight, and each missing path is reported once
 
 ## Design
 

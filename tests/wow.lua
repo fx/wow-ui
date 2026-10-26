@@ -250,8 +250,10 @@ setters(Button, "RegisterForClicks SetMotionScriptsWhileDisabled")
 
 -- Textures
 inherit(Texture, Region)
-function Texture:SetTexture(t) self._texture = t end
-function Texture:SetColorTexture(r, g, b, a) self._color = { r, g, b, a } end
+-- A texture shows either a file or a color, like the client: setting one
+-- replaces the other.
+function Texture:SetTexture(t) self._texture, self._color = t, nil end
+function Texture:SetColorTexture(r, g, b, a) self._color, self._texture = { r, g, b, a }, nil end
 function Texture:SetVertexColor(r, g, b, a) self._vertex = { r, g, b, a } end
 function Texture:GetVertexColor()
   local v = self._vertex or { 1, 1, 1, 1 }
