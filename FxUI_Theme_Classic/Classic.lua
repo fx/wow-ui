@@ -67,6 +67,21 @@ local function has(path)
   return ok
 end
 
+-- Whether the client ships both files of a backdrop (each is probed, so
+-- each missing one is reported).
+local function backdropShips(def)
+  local bg = not def.bgFile or has(def.bgFile)
+  local edge = not def.edgeFile or has(def.edgeFile)
+  return bg and edge
+end
+
+-- A classic backdrop, only when the client ships its files; false
+-- otherwise, so the caller draws FxUI's own surface instead.
+local function backdrop(frame, def, bg, border)
+  if not backdropShips(def) then return false end
+  return K.backdrop(frame, def, bg, border)
+end
+
 local GOLD, WHITE, GRAY = "#FFD100", "#FFFFFF", "#808080"
 
 -- A three-slice texture set (left cap, stretched middle, right cap) from one
@@ -266,7 +281,7 @@ skins.Tab = {
 
 skins.Window = {
   paint = function(f, p, size)
-    if not K.backdrop(f, DIALOG) then
+    if not backdrop(f, DIALOG) then
       K.surface(f, "#0B0B0B", "#5A4A2A", 4)
     end
     for i = 1, 3 do f.grip.lines[i]:SetColorTexture(K.color(GOLD)) end
@@ -295,7 +310,7 @@ skins.Window = {
     end
   end,
   paintFooter = function(footer)
-    if not K.backdrop(footer, TOOLTIP, "#000000B3", "#808080") then
+    if not backdrop(footer, TOOLTIP, "#000000B3", "#808080") then
       K.surface(footer, "#000000", "#808080", 0)
     end
   end,
@@ -319,7 +334,7 @@ skins.Window = {
 
 skins.Meter = {
   paint = function(f, p)
-    if not K.backdrop(f.track, THIN, "#000000AA", "#909090") then
+    if not backdrop(f.track, THIN, "#000000AA", "#909090") then
       K.surface(f.track, "#000000", "#909090", 0)
     end
     local fill = f.fill
@@ -368,11 +383,11 @@ skins.Badge = {
     if p.solid then
       -- A darkened tone with white text stays readable for every tone.
       local fill = K.mix(tone, "#000000", 0.55)
-      if not K.backdrop(f, THIN, fill) then K.surface(f, fill, nil, 4) end
+      if not backdrop(f, THIN, fill) then K.surface(f, fill, nil, 4) end
       if f.SetBackdropBorderColor then f:SetBackdropBorderColor(r, g, b, 1) end
       f.label:SetTextColor(1, 1, 1, 1)
     else
-      if not K.backdrop(f, THIN, "#000000CC") then K.surface(f, "#000000", nil, 4) end
+      if not backdrop(f, THIN, "#000000CC") then K.surface(f, "#000000", nil, 4) end
       if f.SetBackdropBorderColor then f:SetBackdropBorderColor(r * 0.8, g * 0.8, b * 0.8, 1) end
       f.label:SetTextColor(r, g, b, 1)
     end
@@ -461,11 +476,11 @@ skins.Chart = {
     if kind == "last" then
       -- Like a badge: tone border and tone text on black.
       local r, g, b = K.color(bg)
-      if not K.backdrop(t, THIN, "#000000E6") then K.surface(t, "#000000", bg, 2) end
+      if not backdrop(t, THIN, "#000000E6") then K.surface(t, "#000000", bg, 2) end
       if t.SetBackdropBorderColor then t:SetBackdropBorderColor(r * 0.8, g * 0.8, b * 0.8, 1) end
       t.text:SetTextColor(r, g, b, 1)
     else
-      if not K.backdrop(t, THIN, "#000000E6", "#909090") then K.surface(t, "#000000", "#909090", 2) end
+      if not backdrop(t, THIN, "#000000E6", "#909090") then K.surface(t, "#000000", "#909090", 2) end
     end
   end,
 }
@@ -510,11 +525,12 @@ UI.registerTheme({
     small = { path = FRIZ, size = 10, shadow = true },
     monoSmall = { path = ARIAL, size = 11, shadow = true },
   },
-  surfaces = {
+  -- Without the tooltip art, cards, toasts and insets keep FxUI's own.
+  surfaces = backdropShips(TOOLTIP) and {
     card = { backdrop = TOOLTIP, bgColor = "#000000B3", borderColor = "#B0B0B0" },
     toast = { backdrop = TOOLTIP, bgColor = "#000000E6", borderColor = "#B0B0B0" },
     inset = { backdrop = THIN, bgColor = "#00000080", borderColor = "#808080" },
-  },
+  } or nil,
   money = "icons",
   metrics = {
     Button = {
