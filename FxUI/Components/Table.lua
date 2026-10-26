@@ -161,6 +161,7 @@ end
 -- Props: columns = { { key, title, width | flex, align (LEFT|RIGHT),
 -- sortable (default true), sortValue(item), render(item, i) -> element } },
 -- items, key, rowHeight, striped, selected, onSelect(item, i, key),
+-- onContextMenu(item, i, key) (a row right-clicked),
 -- defaultSort = { key, desc }, or controlled: sort = { key, desc } with
 -- onSort(key, desc). Other props pass to the list (empty, highlight, ...).
 UI.Table = I.defineComponent("Table", {
@@ -243,6 +244,7 @@ UI.Table = I.defineComponent("Table", {
         striped = props.striped,
         selected = props.selected,
         onSelect = props.onSelect,
+        onContextMenu = props.onContextMenu,
         highlight = props.highlight,
         empty = props.empty,
         scrollbar = "always",

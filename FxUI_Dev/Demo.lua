@@ -178,6 +178,16 @@ local ControlsPage = UI.component("DemoControls", {
               UI.Text { text = "clicked " .. (s.pressed or 0) .. "\195\151", style = "small", color = "muted" },
             },
             UI.Pressable { disabled = true, padding = { 2, 6 }, UI.Text { text = "Disabled", color = "muted" } },
+            UI.Pressable { padding = { 2, 6 }, tooltip = "Opens a context menu.",
+              onClick = function(frame)
+                UI.showMenu(frame, {
+                  { text = "Reset the count", onClick = function() ctx:setState({ pressed = 0 }) end },
+                  { divider = true },
+                  { text = "Not available", disabled = true },
+                }, { title = "MENU" })
+              end,
+              UI.Text { text = "Menu\226\128\166" },
+            },
           },
         }),
         Card("Sliders", {

@@ -98,6 +98,19 @@ This spec owns the behaviour of FxUI's general-purpose components: text primitiv
 - **WHEN** the player hovers and clicks it
 - **THEN** the cell is shaded, the tooltip shows, and `onClick` runs once
 
+### Context menu
+
+- `UI.showMenu(owner, items, opts)` MUST show one menu at the cursor: `items` = `{ { text, onClick, disabled, tooltip } }` or `{ divider = true }`, `opts.title` a muted heading. It uses the theme's `tooltip` surface, is at least 140 px wide, every item as wide as the menu, and stays on screen.
+- An item is a [Pressable](#pressable): clicking an enabled one MUST close the menu, then run its `onClick`; a disabled one is drawn muted and does nothing.
+- A click anywhere outside the menu MUST close it (and do nothing else). `UI.hideMenu(owner)` MUST close it only while that owner shows it (any owner when nil); `UI.menuOwner()` MUST return the frame it is shown for, or nil. Showing another menu replaces it.
+- A [list](../data-components/#list) or [table](../data-components/#table) MUST call `onContextMenu(item, i, key)` when a row is right-clicked (and take the mouse for it even without `onSelect`); a left click never calls it.
+
+#### Scenario: Row menu
+
+- **GIVEN** a table whose `onContextMenu` shows a menu with "Show" and "Check"
+- **WHEN** the player right-clicks the second row and clicks "Show"
+- **THEN** the menu opened at the cursor for that row's item, the item ran once, and the menu is closed
+
 ### Tabs
 
 - `UI.TabBar` MUST draw a row of tabs from `tabs = { { id, text, count } }` with `selected` (an id) and call `onSelect(id)` when a tab is clicked; `padding` sets the row's padding.
@@ -213,3 +226,4 @@ The toast stack is an FxUI tree mounted once, on first use, in a `DIALOG`-strata
 | 2026-10-26 | Slider | [0004-slider](../../changes/0004-slider.md) |
 | 2026-10-26 | Tooltip and help icon; buttons and sliders use the tooltip | [0005-tooltip-help](../../changes/0005-tooltip-help.md) |
 | 2026-10-26 | Pressable | [0006-pressable](../../changes/0006-pressable.md) |
+| 2026-10-26 | Context menu; row right-clicks in lists and tables | [0007-context-menu](../../changes/0007-context-menu.md) |

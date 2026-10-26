@@ -181,7 +181,8 @@ end
 -- render(item, i) -> element, striped, overscan, rowPadding, empty,
 -- highlight (hover highlight, default on), selected (key of the active row),
 -- onSelect(item, i, key) (row clicks select; buttons inside rows keep their
--- own clicks), scrollbar ("always" reserves its width even when not needed).
+-- own clicks), onContextMenu(item, i, key) (a row right-clicked),
+-- scrollbar ("always" reserves its width even when not needed).
 I.defineHost("List", {
   create = function(holder)
     local f = CreateFrame("Frame", nil, holder)
@@ -238,7 +239,16 @@ I.defineHost("List", {
     end)
     f:SetScript("OnMouseUp", function(self, button)
       local node = self.fxNode
-      if not node or not node.pressed then return end
+      if not node then return end
+      if button == "RightButton" then
+        local p, i = node.el.props, rowAt(node)
+        if i and p.onContextMenu then
+          local item = (p.items or {})[i]
+          p.onContextMenu(item, i, keyOf(p, item, i))
+        end
+        return
+      end
+      if not node.pressed then return end
       local i = node.pressed
       node.pressed = nil
       local p = node.el.props
@@ -262,7 +272,7 @@ I.defineHost("List", {
   end,
   update = function(node, p)
     local f = node.region
-    f:EnableMouse(p.onSelect ~= nil)
+    f:EnableMouse(p.onSelect ~= nil or p.onContextMenu ~= nil)
     f.track:SetWidth(thumbW())
     if I.setShape(f.track, 4, false) then
       f.track:SetVertexColor(I.rgba("ground"))

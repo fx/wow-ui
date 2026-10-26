@@ -363,6 +363,93 @@ I.defineHost("Pressable", {
 })
 
 ---------------------------------------------------------------------------
+-- Context menu
+---------------------------------------------------------------------------
+
+local MENU_MIN_W = 140
+
+local MenuView = I.defineComponent("FxMenu", function(props)
+  local body = { gap = 0, padding = 4, surface = "tooltip", align = "stretch", minWidth = MENU_MIN_W }
+  if props.title and props.title ~= "" then
+    body[#body + 1] = UI.VStack { padding = { 4, 8, 2, 8 }, UI.Text { text = props.title, style = "label", color = "muted" } }
+  end
+  for _, item in ipairs(props.items or {}) do
+    if item.divider then
+      body[#body + 1] = UI.Divider {}
+    else
+      body[#body + 1] = UI.Pressable {
+        padding = { 5, 8 },
+        disabled = item.disabled,
+        tooltip = item.tooltip,
+        onClick = function()
+          UI.hideMenu()
+          if item.onClick then item.onClick() end
+        end,
+        UI.Text { text = item.text or "", color = item.disabled and "muted" or "text" },
+      }
+    end
+  end
+  return UI.VStack(body)
+end)
+
+-- One menu for every copy of the library: an upgrade keeps it.
+I.menu = I.menu or {}
+local MN = I.menu
+
+-- Show a context menu for `owner` at the cursor: `items` = { { text,
+-- onClick, disabled, tooltip } or { divider = true } }, opts.title. A
+-- click on an item runs it and closes the menu; a click anywhere else
+-- closes it. One menu at a time: showing another replaces it.
+function UI.showMenu(owner, items, opts)
+  opts = opts or {}
+  local view = MenuView { items = items, title = opts.title }
+  if not MN.host then
+    -- A click outside the menu lands on the catcher, which closes it.
+    local catcher = CreateFrame("Button", nil, UIParent)
+    catcher:SetAllPoints(UIParent)
+    catcher:SetFrameStrata("FULLSCREEN_DIALOG")
+    catcher:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    catcher:SetScript("OnClick", function() UI.hideMenu() end)
+    catcher:Hide()
+    local host = CreateFrame("Frame", nil, UIParent)
+    host:SetFrameStrata("FULLSCREEN_DIALOG")
+    host:SetFrameLevel(catcher:GetFrameLevel() + 10)
+    host:SetClampedToScreen(true)
+    I.followScale(host, false)
+    MN.catcher, MN.host = catcher, host
+    MN.root = UI.mount(host, view)
+  else
+    MN.root:update(view)
+  end
+  local host = MN.host
+  local w, h = I.measure(MN.root.node, 400, 2000)
+  host:SetSize(w, h)
+  MN.root:layout()
+  local x, y = GetCursorPosition()
+  local scale = host:GetEffectiveScale()
+  host:ClearAllPoints()
+  host:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale, y / scale)
+  UI.hideTooltip()
+  MN.owner = owner
+  MN.catcher:Show()
+  host:Show()
+end
+
+-- Close the menu when `owner` shows it (any owner when nil).
+function UI.hideMenu(owner)
+  if MN.host and (owner == nil or MN.owner == owner) then
+    MN.host:Hide()
+    MN.catcher:Hide()
+    MN.owner = nil
+  end
+end
+
+-- The frame the menu is shown for, or nil while it is closed.
+function UI.menuOwner()
+  return MN.host and MN.host:IsShown() and MN.owner or nil
+end
+
+---------------------------------------------------------------------------
 -- Badge
 ---------------------------------------------------------------------------
 

@@ -1249,6 +1249,78 @@ test("pressable: any content as a click target, shaded on hover and press, with 
   root:unmount()
 end)
 
+test("context menu: at the cursor, an item runs and closes it, a click outside closes it", function()
+  local ran = {}
+  W.cursorX, W.cursorY = 300, 400
+  local owner = CreateFrame("Frame", nil, UIParent)
+  UI.showMenu(owner, {
+    { text = "Show", onClick = function() ran[#ran + 1] = "show" end, tooltip = "In the other window" },
+    { divider = true },
+    { text = "Later", disabled = true, onClick = function() ran[#ran + 1] = "later" end },
+  }, { title = "ITEM" })
+  local M = I.menu
+  eq(UI.menuOwner(), owner)
+  ok(M.catcher:IsShown(), "a click outside lands on the catcher")
+  local at = M.host._points[1]
+  eq(at[1], "TOPLEFT")
+  eq(at[4], 300)
+  eq(at[5], 400, "at the cursor")
+  local w = M.host:GetSize()
+  ok(w >= 140, "at least 140 wide: " .. w)
+  eq(find(M.root, "Text")[1].el.props.text, "ITEM", "its title")
+  eq(#find(M.root, "Divider"), 1)
+  local items = find(M.root, "Pressable")
+  eq(#items, 2)
+  eq(items[1].w, items[2].w, "items as wide as the menu")
+  items[1].region:_fire("OnEnter")
+  eq(UI.tooltipOwner(), items[1].region, "an item's tooltip")
+  items[1].region:_fire("OnLeave")
+  items[2].region:_click()
+  eq(#ran, 0, "a disabled item does nothing")
+  eq(UI.menuOwner(), owner, "and the menu stays")
+  items[1].region:_click()
+  eq(ran[1], "show")
+  eq(UI.menuOwner(), nil, "an item closes the menu")
+  ok(not M.catcher:IsShown())
+  -- A click outside closes it; another owner's hide does not.
+  UI.showMenu(owner, { { text = "Again" } })
+  UI.hideMenu(CreateFrame("Frame"))
+  eq(UI.menuOwner(), owner)
+  M.catcher:_click("RightButton")
+  eq(UI.menuOwner(), nil)
+  UI.showMenu(owner, { { text = "Again" } })
+  UI.hideMenu()
+  eq(UI.menuOwner(), nil, "closed for any owner")
+end)
+
+test("list and table: right-clicking a row asks for its menu", function()
+  local host = CreateFrame("Frame")
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+  host:SetSize(400, 300)
+  local items, got = {}, nil
+  for i = 1, 5 do items[i] = { id = i * 10 } end
+  local root = UI.mount(host, UI.Table {
+    items = items, key = "id", rowHeight = 30,
+    columns = { { key = "id", title = "Id", flex = 1 } },
+    onContextMenu = function(item, i, key) got = { item, i, key } end,
+  })
+  UI.flush()
+  local list = find(root, "List")[1]
+  ok(list.region:IsMouseEnabled(), "a menu alone takes the mouse")
+  local l, b, w, h = list.region:GetRect()
+  W.cursorX, W.cursorY = l + 50, b + h - 45 -- second row
+  list.region:_fire("OnMouseDown", "RightButton")
+  list.region:_fire("OnMouseUp", "RightButton")
+  ok(got and got[1] == items[2] and got[2] == 2 and got[3] == 20, "the row's item, index and key")
+  got = nil
+  list.region:_fire("OnMouseUp", "LeftButton")
+  eq(got, nil, "a left click is not a menu")
+  W.cursorX, W.cursorY = -100, -100
+  list.region:_fire("OnMouseUp", "RightButton")
+  eq(got, nil, "nor a click outside the rows")
+  root:unmount()
+end)
+
 test("controls: button variants, hover and press, busy, tooltip; badges; toggles", function()
   local host = CreateFrame("Frame")
   host:SetSize(600, 100)
