@@ -1838,6 +1838,32 @@ test("layout: stacks are measured as they are placed and keep children inside", 
   end
 end)
 
+test("layout: a flexible child's minimum applies only along the stack's main axis", function()
+  local host = CreateFrame("Frame")
+  host:SetSize(100, 100)
+  -- A row ignores minHeight when sharing widths, and a column ignores minWidth.
+  local root = UI.mount(host, UI.HStack { gap = 0, align = "start",
+    UI.HStack { tag = "a", flex = 1, minHeight = 80 }, UI.HStack { tag = "b", flex = 1 } })
+  local function tagged(name, tag)
+    return find(root, name, function(n) return n.el.props.tag == tag end)[1]
+  end
+  eq(tagged("HStack", "a").w, 50, "row: minHeight is not a width minimum")
+  eq(tagged("HStack", "b").w, 50, "row: the other child gets an equal share")
+  eq(tagged("HStack", "a").h, 80, "row: minHeight still holds across the row")
+  local mw = I.measure(find(root, "HStack")[1], nil, nil)
+  eq(mw, 0, "row: measured main size counts no cross-axis minimum")
+  root:unmount()
+
+  root = UI.mount(host, UI.VStack { gap = 0, align = "start",
+    UI.VStack { tag = "a", flex = 1, minWidth = 80 }, UI.VStack { tag = "b", flex = 1 } })
+  eq(tagged("VStack", "a").h, 50, "column: minWidth is not a height minimum")
+  eq(tagged("VStack", "b").h, 50, "column: the other child gets an equal share")
+  eq(tagged("VStack", "a").w, 80, "column: minWidth still holds across the column")
+  local _, mh = I.measure(find(root, "VStack")[1], nil, nil)
+  eq(mh, 0, "column: measured main size counts no cross-axis minimum")
+  root:unmount()
+end)
+
 test("table: mixed-type columns sort the same way from every starting order", function()
   local values = { 2, 10, "11", "b", "A" }
   local function permutations(list)

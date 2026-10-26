@@ -513,6 +513,18 @@ local function wrapLayout(kids, props, w, h)
   end
 end
 
+-- A child's minimum along a stack's main axis: minWidth in a row, minHeight
+-- in a column, 0 when unset. The other axis's minimum never stands in.
+local function mainMin(c, horizontal)
+  local m
+  if horizontal then
+    m = layoutProp(c, "minWidth")
+  else
+    m = layoutProp(c, "minHeight")
+  end
+  return m or 0
+end
+
 -- Main-axis sizes of a stack's children inside an innerW x innerH box: the
 -- one computation both measuring and placing use, so a stack is measured
 -- exactly as it will be placed. Fixed children get their natural size, each
@@ -536,7 +548,7 @@ local function stackSizes(kids, props, horizontal, innerW, innerH)
     flexes[i] = flex
     if flex > 0 then
       totalFlex = totalFlex + flex
-      mains[i] = (horizontal and layoutProp(c, "minWidth") or layoutProp(c, "minHeight")) or 0
+      mains[i] = mainMin(c, horizontal)
       reserved = reserved + mains[i]
     else
       local left = math.max(innerMain - used - reserved - gap * (i - 1), 0)
@@ -601,7 +613,7 @@ function I.stackMeasure(kids, props, horizontal, maxW, maxH)
   local main, cross = 0, 0
   for i = 1, #kids do
     if flexes[i] > 0 then
-      main = main + ((horizontal and layoutProp(kids[i], "minWidth") or layoutProp(kids[i], "minHeight")) or 0)
+      main = main + mainMin(kids[i], horizontal)
     else
       main = main + mains[i]
     end
