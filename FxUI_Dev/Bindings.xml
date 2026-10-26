@@ -1,0 +1,8 @@
+<Bindings>
+  <Binding name="FXUI_DEV_PICK" header="FXUI_DEV" category="ADDONS">
+    FxUIDev_Pick()
+  </Binding>
+  <Binding name="FXUI_DEV_SNAPSHOT" category="ADDONS">
+    FxUIDev_Snapshot()
+  </Binding>
+</Bindings>

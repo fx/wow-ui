@@ -3234,6 +3234,1072 @@ test("themes: the theme dropdown lists Classic and Teal", function()
 end)
 
 ---------------------------------------------------------------------------
+-- Dev tools: FxUI_Dev and the snapshot reader
+---------------------------------------------------------------------------
+
+-- The interpreter running these tests, for the snapshot reader, which runs
+-- as its own process the way it is used. Interpreter options such as
+-- -lluacov sit between the interpreter and the script, so it is the lowest
+-- negative index of arg.
+local LUA = "lua"
+if arg then
+  local lowest = 0
+  while arg[lowest - 1] ~= nil do lowest = lowest - 1 end
+  if lowest < 0 then LUA = arg[lowest] end
+end
+
+local function shellQuote(s)
+  return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+-- Under luacov the reader runs under it too, so its lines count.
+local READER = shellQuote(LUA)
+  .. ((package.loaded.luacov or package.loaded["luacov.runner"]) and " -lluacov" or "")
+  .. " tools/inspect.lua"
+
+-- Runs the reader; returns what it printed (stdout and stderr) and its exit
+-- status.
+local function runReader(path, options)
+  local cmd = READER .. (path and (" " .. shellQuote(path)) or "") .. " " .. (options or "") .. " 2>&1; echo \"exit=$?\""
+  local pipe = assert(io.popen(cmd))
+  local text = pipe:read("*a")
+  pipe:close()
+  local status = tonumber(text:match("exit=(%d+)%s*$"))
+  return (text:gsub("exit=%d+%s*$", "")), status
+end
+
+-- Writes the given SavedVariables the way the client does and reads them
+-- with the reader.
+local function readSaved(options, names)
+  local path = os.tmpname()
+  W.writeSavedVariables(path, names or { "FxUIDevDB" })
+  local text, status = runReader(path, options)
+  os.remove(path)
+  return text, status
+end
+
+-- Reads a hand-built snapshot database stored under `name`.
+local function readDB(db, options, name)
+  name = name or "FxUIDevDB"
+  local saved = _G[name]
+  _G[name] = db
+  local ok2, text, status = pcall(readSaved, options, { name })
+  _G[name] = saved
+  if not ok2 then error(text, 2) end
+  return text, status
+end
+
+-- Everything printed to chat while fn runs.
+local function chat(fn)
+  local lines, savedPrint = {}, print
+  print = function(...)
+    local parts = {}
+    for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
+    lines[#lines + 1] = table.concat(parts, " ")
+  end
+  local ok2, err = pcall(fn)
+  print = savedPrint
+  if not ok2 then error(err, 2) end
+  return table.concat(lines, "\n")
+end
+
+local function rootNamed(name)
+  for r in pairs(I.roots) do
+    if r.node and r.node.def and r.node.def.name == name then return r end
+  end
+end
+
+local function clickTab(root, id)
+  find(root, "Tab", function(n) return n.el.props.id == id end)[1].region:_click()
+  W.nextFrame()
+end
+
+-- Takes a snapshot without reloading and reads it. It is the only one
+-- stored, so writing and reading it stays quick (also under luacov).
+local function snapshotText(options)
+  FxUIDevDB.snapshots = {}
+  FxUIDevCharDB.snapshotReload = false
+  chat(function() fx("dev all") end)
+  FxUIDevCharDB.snapshotReload = true
+  return readSaved(options)
+end
+
+-- The picker frame (shown or not).
+local function pickerFrame()
+  for _, f in ipairs(W.frames) do
+    if f._strata == "TOOLTIP" and f._scripts.OnKeyDown and f._scripts.OnMouseDown then return f end
+  end
+end
+
+test("demo: opens, every tab renders, items load, closes", function()
+  local notice = chat(function()
+    W.loadAddon("FxUI_Dev", "FxUI_Dev")
+    W.fireEvent("PLAYER_LOGIN")
+  end)
+  ok(notice:find("/fx demo", 1, true) and notice:find("/fx dev", 1, true), "login notice names the commands: " .. notice)
+  fx("demo")
+  W.nextFrame()
+  local root = rootNamed("DemoApp")
+  ok(root, "demo root mounted")
+
+  local window = find(root, "Window")[1]
+  ok(window.region:IsShown(), "window shown")
+  eq(window.region:GetWidth(), 980, "default width")
+  eq(window.region:GetHeight(), 660, "default height")
+
+  for _, id in ipairs({ "items", "charts", "theme", "scroll", "controls", "items" }) do
+    local tab = find(root, "Tab", function(n) return n.el.props.id == id end)[1]
+    tab.region:_click()
+    W.nextFrame()
+    W.loadItems()
+    W.nextFrame()
+    ok(#find(root, "Tab", function(n) return n.el.props.selected and n.el.props.id == id end) == 1, id .. " selected")
+    eq(FxUIDevCharDB.tab, id, "selected tab saved")
+  end
+
+  local list = find(root, "List")[1]
+  ok(list and #list.children > 0, "items list has rows")
+  for _ = 1, 50 do list.region:_fire("OnMouseWheel", -1) end
+  W.loadItems()
+  W.nextFrame()
+  ok(#list.children < 30, "rows virtualized")
+
+  -- Sort by a header, select a row.
+  local header = find(root, "Button", function(n) return n.el.props.text == "Price" end)[1]
+  if header then header.region:_click() end
+  W.nextFrame()
+
+  -- Open the inspector from a row; it docks to the demo's right edge.
+  local inspect = find(root, "Button", function(n) return n.el.props.text == "Inspect" end)[1]
+  inspect.region:_click()
+  W.loadItems()
+  W.nextFrame()
+  local inspector = rootNamed("DemoInspector")
+  ok(inspector, "inspector opened")
+  local iframe = find(inspector, "Window")[1].region
+  eq(iframe:GetLeft(), window.region:GetRight() + 8, "docked to the right edge")
+  -- Selecting another row while the inspector is open shows that row.
+  local rows = find(root, "TableRow")
+  if #rows == 0 then rows = find(root, "Button", function(n) return n.el.props.text == "Inspect" end) end
+  rows[#rows].region:_click()
+  W.loadItems()
+  W.nextFrame()
+  ok(rootNamed("DemoInspector"), "inspector follows the selection")
+
+  W.advance(1)
+  W.nextFrame()
+
+  -- Theme tab: global theme buttons, then a theme for this window only.
+  clickTab(root, "theme")
+  local function button(text, nth)
+    return find(root, "Button", function(n) return n.el.props.text == text end)[nth or 1]
+  end
+  button("FxUI Teal").region:_click()
+  W.nextFrame()
+  eq(UI.themeName, "teal", "global theme from a theme addon")
+  button("FxUI Dark").region:_click()
+  W.nextFrame()
+  eq(UI.themeName, "default")
+  button("Classic", 2).region:_click()
+  W.nextFrame()
+  eq(UI.themeName, "default", "the window choice leaves the global theme alone")
+  eq(FxUIDevCharDB.demoTheme, "classic", "window theme saved")
+  local win = find(root, "Window")[1]
+  eq(win.theme and win.theme.name, "classic", "the window uses its own theme")
+  ok(win.region.fxHasBackdrop, "classic draws the window with a dialog backdrop")
+  local inspectorWin = find(rootNamed("DemoInspector"), "Window")[1]
+  eq(inspectorWin.theme and inspectorWin.theme.name, "classic", "the inspector follows the window theme")
+  button("Global").region:_click()
+  W.nextFrame()
+  win = find(root, "Window")[1]
+  eq(win.theme, nil, "back to the global theme")
+  ok(not win.region.fxHasBackdrop, "backdrop cleared when the theme changes back")
+  eq(FxUIDevCharDB.demoTheme, nil)
+
+  -- Charts tab: every mode and a new random series.
+  clickTab(root, "charts")
+  for _, text in ipairs({ "Candles", "Bars", "Randomize", "Line" }) do
+    button(text).region:_click()
+    W.nextFrame()
+  end
+  ok(#find(root, "Chart") == 7, "seven charts")
+
+  -- Controls tab buttons and toasts; combat redraws the demo.
+  clickTab(root, "controls")
+  for _, n in ipairs(find(root, "Button")) do
+    if n.alive then n.region:_click() end
+    W.nextFrame()
+  end
+  for _, n in ipairs(find(root, "Toggle")) do
+    if n.alive then n.region:_click() end
+    W.nextFrame()
+  end
+  W.advance(5)
+  W.nextFrame()
+  W.combat = true
+  W.fireEvent("PLAYER_REGEN_DISABLED")
+  W.nextFrame()
+  ok(#find(root, "Text", function(n) return n.el.props.text == "In combat" end) == 1, "combat state shown")
+  W.combat = false
+  W.fireEvent("PLAYER_REGEN_ENABLED")
+  W.nextFrame()
+
+  local frame = window.region
+  frame.close:_click()
+  W.nextFrame()
+  ok(not frame:IsShown(), "window hidden after close")
+  ok(not root.alive, "demo unmounted after close")
+  ok(not rootNamed("DemoInspector"), "inspector closed with the demo")
+  fx("demo")
+  W.nextFrame()
+  ok(frame:IsShown(), "window frame reused from the pool on reopen")
+  eq(FxUIDevCharDB.tab, "controls", "reopens on the saved tab")
+  fx("demo")
+end)
+
+test("demo: the same generated data every time, generic items only", function()
+  fx("demo")
+  W.nextFrame()
+  local root = rootNamed("DemoApp")
+  clickTab(root, "items")
+  W.loadItems()
+  W.nextFrame()
+  local function firstItems()
+    local out = {}
+    for _, n in ipairs(find(rootNamed("DemoApp"), "ItemCell")) do out[#out + 1] = tostring(n.el.props.item) end
+    return table.concat(out, ",")
+  end
+  local before = firstItems()
+  ok(#before > 0, "items shown")
+  fx("demo")
+  fx("demo")
+  W.nextFrame()
+  W.loadItems()
+  W.nextFrame()
+  eq(firstItems(), before, "rows are generated once, deterministically")
+  clickTab(rootNamed("DemoApp"), "controls")
+  fx("demo")
+end)
+
+-- A snapshot built by hand, with one node for every flag the reader raises.
+local function flaggedSnapshot()
+  local function fs(text, rect, extra)
+    local r = { type = "FontString", text = text, rect = rect, shown = true, visible = true,
+      font = { file = "Inter.ttf", size = 12 }, color = "#FFFFFF", textWidth = 10 }
+    for k, v in pairs(extra or {}) do r[k] = v end
+    return r
+  end
+  local function frame(rect, extra)
+    local r = { type = "Frame", rect = rect, shown = true, visible = true }
+    for k, v in pairs(extra or {}) do r[k] = v end
+    return r
+  end
+  return {
+    time = 0, date = "2026-01-02 03:04:05", fxui = "FxUI-1.0.1", theme = "default",
+    uiScale = 0.8, fxScale = 1, uiSize = { 1000, 800 }, screen = { 2000, 1600 },
+    client = { version = "12.1.5", build = "1", interface = 120105 },
+    stats = { active = 3, pooled = 2, created = 5 },
+    errors = { { time = 0, message = "boom\nstack line" } },
+    hover = { { type = "Button", name = "HoverMe", node = 5 }, { type = "Frame" } },
+    selected = 5,
+    frames = {
+      { name = "NamedFrame", tree = frame({ 0, 0, 10, 10 }, { parts = { fs("child", { 0, 0, 5, 5 }) } }) },
+      { name = "NotThere", missing = true },
+    },
+    roots = { { parent = "UIParent", tree = {
+      id = 1, component = "App", props = { title = "Demo", onClick = "<fn>" }, state = { count = 1 }, renders = 2,
+      children = { {
+        id = 2, host = "VStack", props = { padding = 10, gap = 4 }, layout = { 0, 0, 200, 100 }, scale = 0.8,
+        theme = "classic",
+        region = frame({ 0, 600, 200, 100 }, { strata = "MEDIUM", level = 3, clips = true }),
+        parts = {
+          fs("cut", { 0, 690, 300, 10 }, { field = "label", truncated = true }),
+          { field = "fxBg", type = "Texture", texture = "Round8.tga", vertex = "#000000", slice = { 4, 4, 4, 4 },
+            uv = { 0, 1, 1, 0, flipped = true }, blend = "ADD", rect = { 0, 600, 200, 100 }, alpha = 0.5, shown = true },
+          { field = "edge", type = "Line", vertex = "#FF0000", shown = false },
+          frame({ 10, 610, 20, 20 }, { field = "sub", type = "Button", parts = { fs("in", { -50, 610, 10, 10 }, { field = "tag" }) } }),
+          frame({ 0, 0, 900, 900 }, { field = "scrollContent" }),
+        },
+        children = {
+          { id = 3, host = "HStack", props = { padding = { 2, 4 } }, layout = { 2, 2, 50, 20 },
+            region = frame({ 2, 678, 50, 20 }) },
+          { id = 4, host = "Text", props = { text = "Too long", color = "text" }, layout = { 150, 40, 80, 10 },
+            region = fs("Too long", { 150, 650, 100, 10 }, { truncated = true, alpha = 0.5 }) },
+          { id = 5, host = "Button", props = { text = "Go", variant = "primary" }, layout = { 10, 60, 40, 20 }, scale = 0.8,
+            region = frame({ 10, 620, 40, 20 }, { type = "Button", enabled = false }),
+            parts = { fs("Go", { 12, 622, 20, 10 }, { field = "label" }) } },
+          { id = 6, host = "HStack", props = {}, region = frame({ 10, 610, 0, 10 }) },
+          { id = 7, host = "HStack", props = {}, layout = { 0, 0, 5, 5 }, region = { type = "Frame", shown = true, visible = true } },
+          { id = 8, host = "List", props = {}, layout = { 0, 0, 100, 50 }, scroll = { 0, 10, 5, 100 },
+            region = frame({ 0, 600, 100, 50 }),
+            children = { { id = 9, host = "HStack", props = {}, region = frame({ 0, 0, 100, 20 }) } } },
+          { id = 10, host = "HStack", props = {}, region = frame({ 0, 600, 10, 10 }, { visible = false }) },
+        },
+      } },
+    } }, { parent = "<anonymous>", tree = {
+      id = 11, host = "Frame", props = {}, layout = { 10, 20, 30, 40 },
+      region = frame({ 10, 740, 30, 40 }, { strata = "DIALOG", level = 7 }),
+    } } },
+  }
+end
+
+test("reader: header, errors, hover, selection, trees and every flag", function()
+  local text, status = readDB({ snapshots = { flaggedSnapshot() } })
+  eq(status, 0, "exit status")
+  for _, want in ipairs({
+    "Snapshot 1/1  2026-01-02 03:04:05  client 12.1.5 (1, interface 120105)  FxUI-1.0.1",
+    "UI 1000x800 at scale 0.80 (FxUI x1.00) on a 2000x1600 screen  theme default  regions active 3 / pooled 2 / created 5",
+    "Errors (1):", "boom\n    stack line",
+    "Under the mouse:", "Button HoverMe -> node #5", "Frame <anonymous>",
+    "Selected #5 (picked in game)", "screen pixels: ",
+    "Root 1 in UIParent", "#1 <App> \"Demo\" state{count=1}",
+    "[clips, theme classic]",
+    "Root 2 in <anonymous>", "#11 Frame   @10,20 30x40  [DIALOG/7]",
+    "#3 HStack", "PADDING 8",
+    "#4 Text \"Too long\" color=\"text\"", "TRUNCATED", "SIZE 100x10!=layout 80x10", "OVERFLOW 50",
+    "[alpha 0.5, Inter.ttf 12 #FFFFFF]",
+    "[disabled]", "<== HOVER", "<== SELECTED",
+    "#6 HStack", "ZERO", "#7 HStack", "NO-RECT", "layout 5x5",
+    "OVERFLOW(label) 100", "TRUNCATED(label)", "OVERFLOW(tag) 50",
+    "[invisible]", "scrolls y 5/100 x 0/10",
+    "Issues (",
+  }) do
+    ok(text:find(want, 1, true), "missing " .. want .. ":\n" .. text)
+  end
+  ok(not text:find("#9 HStack %S+ .*OVERFLOW"), "rows of a List are not flagged")
+  ok(not text:find("OVERFLOW(scrollContent)", 1, true), "scroll content is larger by design")
+  ok(not text:find("Frame NamedFrame", 1, true), "named frames only with --frames")
+  local issues = text:match("Issues %(%d+%):\n(.*)$")
+  ok(issues and issues:find("#4 App > VStack > Text: OVERFLOW 50", 1, true), "issues name the path:\n" .. tostring(issues))
+  local _, selectedCount = text:gsub("#5 Button", "")
+  eq(selectedCount, 2, "the selection is printed once more, with its parts")
+  local _, issueCount = issues:gsub("#5 Button", "")
+  eq(issueCount, 0, "the disabled button raises no issue")
+end)
+
+test("reader: --parts, --props, --frames, --node, --list and --snapshot", function()
+  local first, second = flaggedSnapshot(), flaggedSnapshot()
+  second.date = "2026-01-02 04:00:00"
+  second.selected, second.errors, second.hover = nil, {}, nil
+  local db = { snapshots = { first, second } }
+
+  local text = readDB(db, "--parts")
+  ok(text:find("Snapshot 2/2", 1, true), "newest by default:\n" .. text)
+  ok(not text:find("Selected #", 1, true), "no selection in the newest")
+  ok(text:find(". fxBg:Texture Round8.tga #000000 slice 4,4,4,4 uv 0-1 1-0 flipped ADD 200x100 alpha 0.5", 1, true), "texture part:\n" .. text)
+  ok(text:find(". label:FontString \"cut\" Inter.ttf 12 #FFFFFF w=10 TRUNCATED 300x10", 1, true), "font string part")
+  ok(text:find(". edge:Line #FF0000 hidden", 1, true), "line part")
+  ok(text:find("    . tag:FontString \"in\"", 1, true), "parts of a sub-frame")
+
+  text = readDB(db, "--props")
+  ok(text:find("onClick=\"<fn>\"", 1, true) and text:find("gap=4 padding=10", 1, true), "every prop:\n" .. text)
+
+  text = readDB(db, "--frames")
+  ok(text:find("Frame NamedFrame\n  ?:Frame 10x10\n    ?:FontString \"child\"", 1, true), "named frame dumped:\n" .. text)
+  ok(text:find("Frame NotThere (not found)", 1, true), "missing frame reported")
+
+  text = readDB(db, "--node 4")
+  ok(text:find("Node #4 (root 1)", 1, true), "only that node:\n" .. text)
+  ok(text:find("screen pixels: 300,280 200x20  (crop 200x20+300+280)", 1, true), "screen pixels at scale 1")
+  ok(not text:find("Issues", 1, true) and not text:find("Root 1", 1, true), "no tree, no issue list")
+  text = readDB(db, "--node 5")
+  ok(text:find("screen pixels: 16,533 66x33  (crop 66x33+16+533)", 1, true), "the node's own scale:\n" .. text)
+  text = readDB(db, "--node 1")
+  ok(text:find("Node #1 (root 1)\n  screen pixels: ", 1, true), "a component's rect is its child's:\n" .. text)
+
+  text = readDB(db, "--list")
+  ok(text:find("1  2026-01-02 03:04:05  2 roots  1 errors\n2  2026-01-02 04:00:00  2 roots  0 errors", 1, true), "list:\n" .. text)
+
+  text = readDB(db, "--snapshot 1")
+  ok(text:find("Snapshot 1/2", 1, true) and text:find("Selected #5", 1, true), "first snapshot:\n" .. text)
+  text = readDB(db, "--snapshot -1")
+  ok(text:find("Snapshot 1/2", 1, true), "-1 is the one before the newest:\n" .. text)
+
+  text = readDB(db, nil, "FxUIInspectDB")
+  ok(text:find("Snapshot 2/2", 1, true), "reads the earlier variable name:\n" .. text)
+end)
+
+test("reader: usage without a file, status 1 without snapshots", function()
+  local text, status = runReader(nil, "")
+  eq(status, 2, "usage status")
+  ok(text:find("usage: lua tools/inspect.lua", 1, true), "usage printed: " .. text)
+  text, status = readDB({ snapshots = {} })
+  eq(status, 1, "no snapshots")
+  ok(text:find("No snapshots in ", 1, true), text)
+  local empty = { snapshots = { { roots = {} } } }
+  text, status = readDB(empty)
+  eq(status, 0)
+  ok(text:find("Snapshot 1/1  ?", 1, true) and text:find("No layout issues flagged.", 1, true), "a bare snapshot reads:\n" .. text)
+end)
+
+test("dev: the reader flags non-finite geometry instead of failing", function()
+  local text, status = readDB({ snapshots = { {
+    time = 0, client = { version = "12.1.5", build = "1", interface = 120105 }, uiSize = { 1920, 1080 }, uiScale = 1,
+    screen = { 3840, 2160 },
+    roots = { { parent = "UIParent", tree = { id = 1, host = "HStack", props = {}, layout = { 0, 0, 10, 10 },
+      region = { type = "Frame", shown = true, visible = true, rect = { 0, 0 / 0, 10, math.huge } } } } },
+  } } })
+  eq(status, 0, "read without failing:\n" .. text)
+  ok(text:find("NONFINITE", 1, true), "flagged:\n" .. text)
+end)
+
+-- Rects are in each region's own scale; a scaled window's rects only compare
+-- with UIParent's (and each other's) once brought to one scale.
+local function scaledSnapshot()
+  local function frame(rect, extra)
+    local r = { type = "Frame", rect = rect, shown = true, visible = true }
+    for k, v in pairs(extra or {}) do r[k] = v end
+    return r
+  end
+  return {
+    time = 0, date = "2026-01-02 03:04:05", uiScale = 0.8, fxScale = 0.5, uiSize = { 1000, 800 }, screen = { 2000, 1600 },
+    client = { version = "12.1.5", build = "1", interface = 120105 },
+    selected = 3,
+    roots = {
+      -- At half the UI's scale: x 600-800, y 200-400 of a 1000x800 UI.
+      { parent = "UIParent", tree = {
+        id = 1, host = "Window", props = {}, layout = { 0, 0, 400, 400 }, scale = 0.4,
+        region = frame({ 1200, 400, 400, 400 }),
+        parts = {
+          -- Sub-frames drawn at their own (double) scale: x 1300-1450 and
+          -- 1500-1650 in the window's units.
+          frame({ 650, 250, 75, 10 }, { field = "badge", scale = 0.8 }),
+          frame({ 750, 250, 75, 10 }, { field = "wide", scale = 0.8 }),
+        },
+        children = {
+          { id = 2, host = "HStack", props = {}, layout = { 1550, 410, 100, 20 }, scale = 0.4,
+            region = frame({ 1550, 410, 100, 20 }) },
+          { id = 3, host = "HStack", props = {}, layout = { 10, 370, 100, 20 }, scale = 0.4,
+            region = frame({ 1210, 410, 100, 20 }) },
+          -- No scale recorded: the parent's.
+          { id = 4, host = "HStack", props = {}, layout = { 20, 360, 100, 20 },
+            region = frame({ 1220, 410, 100, 20 }) },
+        },
+      } },
+      -- At 1.5 times the UI's scale: x 900-1050 sticks 50 UI units (33.3 of
+      -- its own) out of the 1000-unit UI.
+      { parent = "UIParent", tree = {
+        id = 5, host = "Window", props = {}, layout = { 0, 0, 100, 100 }, scale = 1.2,
+        region = frame({ 600, 100, 100, 100 }),
+      } },
+    },
+  }
+end
+
+test("reader: compares rects at one scale in scaled windows", function()
+  local db = { snapshots = { scaledSnapshot() } }
+  local text, status = readDB(db)
+  eq(status, 0, "exit status:\n" .. text)
+  local issues = text:match("Issues %(%d+%):\n(.*)$") or ""
+  ok(not issues:find("#1 Window: OVERFLOW %d"), "a half-scale window inside the UI fits:\n" .. text)
+  ok(issues:find("#5 Window: OVERFLOW 33.3", 1, true), "a 150% window past the UI's edge overflows:\n" .. text)
+  ok(issues:find("#2 Window > HStack: OVERFLOW 50", 1, true), "a child past its window's edge, in its own units:\n" .. text)
+  ok(not issues:find("#3 ", 1, true) and not issues:find("#4 ", 1, true), "children inside the window fit:\n" .. text)
+  ok(text:find("#1 Window   @1200,800 400x400  [scale x0.50]", 1, true), "the window's position in its own units:\n" .. text)
+  ok(text:find("#3 HStack   @10,370 100x20", 1, true), "relative positions at one scale:\n" .. text)
+  ok(text:find("#4 HStack   @20,370 100x20", 1, true), "a node without a scale takes its parent's:\n" .. text)
+  ok(not issues:find("OVERFLOW(badge)", 1, true), "a part at its own scale inside the node fits:\n" .. text)
+  ok(issues:find("#1 Window: OVERFLOW(wide) 50", 1, true), "a part at its own scale past the node's edge:\n" .. text)
+
+  local selected = text:match("Selected #3 %(picked in game%)\n(.-)\n\n")
+  ok(selected and selected:find("#3 HStack", 1, true) and not selected:find("!!", 1, true),
+    "the selection, against the UI, at one scale:\n" .. text)
+
+  text = readDB(db, "--node 1")
+  ok(text:find("#1 Window   @1200,800 400x400", 1, true) and not text:find("OVERFLOW 600", 1, true)
+    and not text:find("#1 Window[^\n]*OVERFLOW %d"), "--node at one scale:\n" .. text)
+end)
+
+-- Sub-regions nest inside sub-frames (a title inside a header frame).
+local function nestedSnapshot()
+  local function fs(field, rect, extra)
+    local r = { type = "FontString", field = field, text = field, rect = rect, shown = true, visible = true }
+    for k, v in pairs(extra or {}) do r[k] = v end
+    return r
+  end
+  local function frame(field, rect, parts, extra)
+    local r = { type = "Frame", field = field, rect = rect, shown = true, visible = true, parts = parts }
+    for k, v in pairs(extra or {}) do r[k] = v end
+    return r
+  end
+  local inside = { 10, 10, 20, 10 }
+  local outside = { 500, 10, 20, 10 }
+  return {
+    time = 0, uiScale = 1, uiSize = { 1000, 800 },
+    roots = { { parent = "UIParent", tree = {
+      id = 1, host = "Window", props = {}, layout = { 0, 0, 200, 100 }, scale = 1,
+      region = { type = "Frame", rect = { 0, 0, 200, 100 }, shown = true, visible = true },
+      parts = {
+        frame("header", { 0, 80, 200, 20 }, {
+          fs("title", inside, { truncated = true }),
+          frame("bar", { 0, 80, 200, 20 }, {
+            fs("deepTitle", inside, { truncated = true }),
+            fs("farTag", outside),
+            fs("nanPart", { 0 / 0, 10, 20, 10 }),
+          }),
+          frame("clipper", { 0, 80, 200, 20 }, { fs("clippedTag", outside) }, { clips = true }),
+        }),
+        frame("hiddenHeader", { 0, 80, 200, 20 }, {
+          fs("hiddenTitle", inside, { truncated = true }),
+          frame("hiddenBar", { 0, 80, 200, 20 }, { fs("hiddenDeep", inside, { truncated = true }), fs("hiddenTag", outside) }),
+        }, { shown = false, visible = false }),
+        frame("panel", { 0, 0, 200, 80 }, {
+          frame("closedBar", { 0, 0, 200, 20 }, { fs("closedTitle", inside, { truncated = true }), fs("closedTag", outside) },
+            { shown = false, visible = false }),
+        }),
+      },
+    } } },
+  }
+end
+
+test("reader: checks sub-regions at every depth, skipping hidden ones", function()
+  local db = { snapshots = { nestedSnapshot() } }
+  local text, status = readDB(db)
+  eq(status, 0, "exit status:\n" .. text)
+  local issues = text:match("Issues %(%d+%):\n(.*)$") or ""
+  for _, want in ipairs({ "TRUNCATED(title)", "TRUNCATED(deepTitle)", "OVERFLOW(farTag) 320", "NONFINITE(nanPart)" }) do
+    ok(issues:find(want, 1, true), "missing " .. want .. ":\n" .. text)
+  end
+  for _, unwanted in ipairs({ "hiddenTitle", "hiddenDeep", "hiddenTag", "closedTitle", "closedTag", "clippedTag", "OVERFLOW(nanPart)" }) do
+    ok(not issues:find(unwanted, 1, true), "flagged under a hidden or clipping ancestor: " .. unwanted .. ":\n" .. text)
+  end
+
+  text = readDB(db, "--parts")
+  ok(text:find("\n            . deepTitle:FontString \"deepTitle\"", 1, true), "--parts lists every depth:\n" .. text)
+end)
+
+test("dev: /fx dev all snapshots the demo and the reader prints it", function()
+  FxUIDevDB = nil
+  fx("demo")
+  W.nextFrame()
+  W.loadItems()
+  W.nextFrame()
+  local root = rootNamed("DemoApp")
+  local button = find(root, "Button", function(n) return n.el.props.text == "Primary" end)[1]
+  W.mouseFoci = { button.region }
+  local reloads = W.reloads or 0
+  fx("dev all UIParent NoSuchFrame")
+  eq(W.reloads, reloads + 1, "reloaded")
+  W.mouseFoci = nil
+  local snaps = FxUIDevDB.snapshots
+  ok(snaps and #snaps == 1, "one snapshot stored")
+  ok(#snaps[1].roots >= 1, "roots captured")
+  eq(snaps[1].client.interface, 120105, "client facts")
+  eq(snaps[1].frames[2].missing, true, "unknown frame recorded as missing")
+
+  local text = readSaved("--frames")
+  local parts = readSaved("--parts")
+  ok(not parts:find('?:FontString "BUTTONS"', 1, true), "node regions are not repeated as parts")
+  ok(parts:find("headerFoot:Texture", 1, true), "sub-frame regions named from the host's fields:\n" .. parts:sub(1, 3000))
+  ok(parts:find("Round8.tga", 1, true), "texture files named, not file IDs")
+  ok(text:find("Snapshot 1/1", 1, true), "header printed:\n" .. text)
+  ok(text:find("<DemoApp>", 1, true), "the demo's tree printed")
+  ok(text:find('Button "Primary"', 1, true), "primary button listed")
+  ok(text:find("<== HOVER", 1, true), "hovered node marked")
+  ok(text:find("Frame UIParent", 1, true), "named frame dumped")
+  ok(text:find("Frame NoSuchFrame (not found)", 1, true), "missing frame reported")
+  ok(not text:find("OVERFLOW", 1, true), "no overflow on the controls tab:\n" .. text)
+
+  -- Every tab lays out without flags (item names may end in an ellipsis),
+  -- at the default size and at the window's minimum size, in the default
+  -- theme and in Classic.
+  local function noFlags(out, what)
+    ok(out:find("<DemoApp>", 1, true), what .. ": the reader printed the tree:\n" .. out)
+    local issues = out:match("Issues %(%d+%):\n(.*)$") or ""
+    for line in issues:gmatch("[^\n]+") do
+      ok(line:find("ItemCell: TRUNCATED(name)", 1, true), what .. ": " .. line .. "\n" .. out)
+    end
+  end
+  for _, variant in ipairs({ { 980, 660 }, { 760, 520 }, { 980, 660, "classic" }, { 760, 520, "classic" } }) do
+    FxUIDevCharDB.demoTheme = variant[3]
+    root:update()
+    W.nextFrame()
+    local frame = find(root, "Window")[1].region
+    frame:SetSize(variant[1], variant[2])
+    W.nextFrame()
+    local where = " at " .. variant[1] .. "x" .. variant[2] .. " in " .. (variant[3] or "default")
+    for _, id in ipairs({ "controls", "items", "charts", "theme", "scroll" }) do
+      clickTab(root, id)
+      W.loadItems()
+      W.nextFrame()
+      local out = snapshotText()
+      noFlags(out, id .. " tab" .. where)
+      if id == "theme" then ok(out:find("<DemoTheme>", 1, true), "theme tab captured") end
+      if id == "charts" then
+        for _, mode in ipairs({ "Candles", "Bars", "Line" }) do
+          find(root, "Button", function(n) return n.el.props.text == mode end)[1].region:_click()
+          W.nextFrame()
+          noFlags(snapshotText(), "charts " .. mode .. where)
+        end
+      end
+      if id == "scroll" then
+        ok(out:find("scrolls y %d+/%d+ x %d+/%d+"), "the both-directions view scrolls on both axes")
+        ok(out:find("scrolls x", 1, true), "the horizontal view scrolls")
+      end
+    end
+  end
+  FxUIDevCharDB.demoTheme = nil
+  root:update()
+  find(root, "Window")[1].region:SetSize(980, 660)
+  W.nextFrame()
+  clickTab(root, "controls")
+  fx("demo")
+end)
+
+test("dev: snapshots keep the newest five, skip the reload with -n, refuse in combat, report failures", function()
+  local reloads = W.reloads or 0
+  local said = chat(function()
+    for _ = 1, 7 do fx("dev all -n") end
+  end)
+  eq(W.reloads or 0, reloads, "-n does not reload")
+  ok(said:find("snapshot stored; it reaches disk on the next reload or logout", 1, true), "says when it reaches disk: " .. said)
+  eq(#FxUIDevDB.snapshots, 5, "the five most recent kept")
+  local newest = FxUIDevDB.snapshots[5]
+  chat(function() fx("dev all -n") end)
+  eq(#FxUIDevDB.snapshots, 5)
+  eq(FxUIDevDB.snapshots[4], newest, "the oldest dropped")
+
+  W.combat = true
+  local count = #FxUIDevDB.snapshots
+  local last = FxUIDevDB.snapshots[count]
+  said = chat(function()
+    fx("dev all")
+    FxUIDev_Snapshot()
+    fx("dev pick")
+  end)
+  W.combat = false
+  eq(FxUIDevDB.snapshots[count], last, "no snapshot in combat")
+  eq(W.reloads or 0, reloads, "no reload in combat")
+  local _, refusals = said:gsub("not in combat", "")
+  eq(refusals, 3, "each refusal says so: " .. said)
+  ok(not (pickerFrame() and pickerFrame():IsShown()), "no picking in combat")
+
+  local savedBuild = GetBuildInfo
+  GetBuildInfo = function() error("no build") end
+  said = chat(function() fx("dev all") end)
+  GetBuildInfo = savedBuild
+  ok(said:find("snapshot failed: ", 1, true) and said:find("no build", 1, true), "failure reported: " .. said)
+  eq(FxUIDevDB.snapshots[#FxUIDevDB.snapshots], last, "nothing stored")
+  eq(W.reloads or 0, reloads, "no reload after a failure")
+
+  -- The key binding snapshots and reloads.
+  FxUIDev_Snapshot()
+  eq(W.reloads, reloads + 1, "key binding reloads")
+  eq(BINDING_NAME_FXUI_DEV_SNAPSHOT, "Snapshot all FxUI and reload")
+  eq(BINDING_NAME_FXUI_DEV_PICK, "Pick an FxUI element to export")
+  eq(BINDING_HEADER_FXUI_DEV, "FxUI Dev")
+
+  said = chat(function() fx("dev help") end)
+  ok(said:find("/fx dev pick", 1, true) and said:find("/fx dev all", 1, true), "usage for anything else: " .. said)
+end)
+
+test("dev: snapshots record props, state, themes, scroll offsets and errors", function()
+  local Probe = UI.component("SnapProbe", {
+    init = function(ctx) ctx.state.n = 1 end,
+    render = function()
+      return UI.VStack { theme = "classic", padding = 4,
+        UI.Text { text = "Probe", meta = { a = 1, b = "x" }, big = { 1, 2, 3, 4, 5, 6, 7, 8, 9 }, nested = { { 1 } },
+          node = UI.Text { text = "el" }, frame = UIParent, fn = function() end, co = coroutine.create(function() end) },
+        UI.ScrollView { height = 40, UI.VStack { height = 400 } },
+      }
+    end,
+  })
+  local root = UI.mount(UIParent, Probe {})
+  W.nextFrame()
+  I.errors = I.errors or {}
+  I.errors[#I.errors + 1] = { time = 0, message = "probe error" }
+  chat(function() fx("dev all -n") end)
+  table.remove(I.errors)
+  local snap = FxUIDevDB.snapshots[#FxUIDevDB.snapshots]
+  local tree
+  for _, r in ipairs(snap.roots) do
+    if r.tree.component == "SnapProbe" then tree = r.tree end
+  end
+  ok(tree, "probe captured")
+  eq(tree.state.n, 1, "component state")
+  eq(tree.renders, 1, "render count")
+  local stack = tree.children[1]
+  eq(stack.theme, "classic", "theme where it differs from the parent's")
+  local text = stack.children[1]
+  eq(text.props.meta.b, "x", "small flat tables inline")
+  eq(text.props.big, "<table 9>", "large tables summarised")
+  eq(text.props.nested, "<table 1>", "nested tables summarised")
+  eq(text.props.node, "<element Text>", "elements summarised")
+  eq(text.props.frame, "<Frame>", "regions summarised")
+  eq(text.props.fn, "<fn>", "functions summarised")
+  eq(text.props.co, "<thread>", "anything else by type")
+  eq(text.region.type, "FontString")
+  eq(text.region.text, "Probe")
+  ok(text.region.font and text.region.font.size, "font recorded")
+  local scroll = stack.children[2]
+  ok(scroll.scroll and scroll.scroll[4] > 0, "scroll range recorded")
+  local found
+  for _, e in ipairs(snap.errors) do
+    if e.message == "probe error" then found = true end
+  end
+  ok(found, "FxUI's errors recorded")
+  local out = readSaved()
+  ok(out:find("<SnapProbe>", 1, true) and out:find("probe error", 1, true), "reader prints it:\n" .. out)
+  root:unmount()
+end)
+
+test("dev: snapshots record a sub-frame's scale where it differs from its frame's", function()
+  local root = UI.mount(UIParent, UI.VStack { width = 100, height = 50 })
+  W.nextFrame()
+  local region = find(root, "VStack")[1].region
+  local scaled = CreateFrame("Frame", nil, region)
+  scaled:SetScale(0.5)
+  region.scaledBadge = scaled
+  local plain = CreateFrame("Frame", nil, region)
+  region.plainBadge = plain
+  chat(function() fx("dev all -n") end)
+  local snap = FxUIDevDB.snapshots[#FxUIDevDB.snapshots]
+  region.scaledBadge, region.plainBadge = nil, nil
+  root:unmount()
+  local byField = {}
+  for _, r in ipairs(snap.roots) do
+    for _, p in ipairs(r.tree.parts or {}) do
+      if p.field == "scaledBadge" or p.field == "plainBadge" then byField[p.field] = p end
+    end
+  end
+  ok(byField.scaledBadge and byField.plainBadge, "both sub-frames captured")
+  eq(byField.scaledBadge and byField.scaledBadge.scale, math.floor(region:GetEffectiveScale() * 0.5 * 1000 + 0.5) / 1000, "the scaled sub-frame's scale")
+  eq(byField.plainBadge and byField.plainBadge.scale, nil, "no scale where it is the frame's")
+end)
+
+test("dev: /fx dev picker highlights, walks up with the wheel, exports the selection", function()
+  fx("demo")
+  W.nextFrame()
+  local root = rootNamed("DemoApp")
+  local button = find(root, "Button", function(n) return n.el.props.text == "Primary" end)[1]
+  local l, b, w, h = button.region:GetRect()
+  W.cursorX, W.cursorY = l + w / 2, b + h / 2
+
+  FxUIDev_Pick()
+  W.nextFrame()
+  local picker = pickerFrame()
+  ok(picker and picker:IsShown(), "picker shown")
+  eq(picker.selected, button, "innermost element under the cursor")
+  ok(picker.label:GetText():find('Button "Primary"', 1, true), "label names the element")
+  ok(picker.label:GetText():find("DemoApp > ", 1, true), "label gives the path from the root")
+  ok(picker.box:IsShown(), "box follows the element")
+
+  picker:_fire("OnMouseWheel", 1)
+  W.nextFrame()
+  eq(picker.selected, button.parent, "wheel up selects the parent")
+  picker:_fire("OnMouseWheel", -1)
+  W.nextFrame()
+  eq(picker.selected, button, "wheel down returns to the child")
+  picker:_fire("OnMouseWheel", -1)
+  W.nextFrame()
+  eq(picker.selected, button, "never below the innermost element")
+
+  -- Scenario: wheel up once and click; the parent is stored as selected.
+  picker:_fire("OnMouseWheel", 1)
+  W.nextFrame()
+  local parent = picker.selected
+  eq(parent, button.parent)
+  local reloads = W.reloads or 0
+  picker:_fire("OnMouseDown", "LeftButton")
+  ok(not picker:IsShown(), "picker closes on click")
+  eq(W.reloads, reloads + 1, "reloads as for any snapshot")
+  local snap = FxUIDevDB.snapshots[#FxUIDevDB.snapshots]
+  ok(snap.selected, "selection stored in a new snapshot")
+  local text = readSaved()
+  ok(text:find("Selected #" .. snap.selected, 1, true), "reader shows the selection:\n" .. text)
+  ok(text:find("Selected #" .. snap.selected .. " (picked in game)\n  screen pixels: ", 1, true), "with its screen rect")
+  ok(text:find("<== SELECTED", 1, true), "marked in the tree")
+
+  -- Picking the button itself prints it with its parts.
+  fx("dev pick")
+  W.nextFrame()
+  picker:_fire("OnMouseDown", "LeftButton")
+  text = readSaved()
+  ok(text:find("label:FontString \"Primary\"", 1, true), "selection printed with parts:\n" .. text)
+
+  -- Right click, Esc and combat stop without a snapshot.
+  local count = #FxUIDevDB.snapshots
+  local last = FxUIDevDB.snapshots[count]
+  fx("dev pick")
+  W.nextFrame()
+  picker:_fire("OnMouseDown", "RightButton")
+  ok(not picker:IsShown(), "right click stops")
+  fx("dev pick")
+  W.combat = true
+  W.fireEvent("PLAYER_REGEN_DISABLED")
+  ok(not picker:IsShown(), "entering combat stops")
+  W.combat = false
+  W.fireEvent("PLAYER_REGEN_ENABLED")
+  fx("dev pick")
+  fx("dev pick")
+  ok(not picker:IsShown(), "the command again stops")
+  eq(FxUIDevDB.snapshots[#FxUIDevDB.snapshots], last, "no snapshot taken")
+
+  -- Nothing under the cursor.
+  W.cursorX, W.cursorY = 1, 1
+  fx("dev pick")
+  W.nextFrame()
+  eq(picker.selected, nil, "nothing selected")
+  ok(not picker.box:IsShown(), "no box")
+  eq(picker.label:GetText(), "No FxUI element here")
+  picker:_fire("OnMouseDown", "LeftButton")
+  eq(FxUIDevDB.snapshots[#FxUIDevDB.snapshots], last, "a click on nothing takes no snapshot")
+
+  -- Hit testing follows the FxUI scale.
+  UI.setScale(0.8)
+  W.nextFrame()
+  button = find(root, "Button", function(n) return n.el.props.text == "Primary" end)[1]
+  local k = button.region:GetEffectiveScale() / UIParent:GetEffectiveScale()
+  l, b, w, h = button.region:GetRect()
+  W.cursorX, W.cursorY = (l + w / 2) * k, (b + h / 2) * k
+  fx("dev pick")
+  W.nextFrame()
+  eq(picker.selected, button, "picked where it is drawn in a scaled window")
+  picker:_fire("OnKeyDown", "ESCAPE")
+  UI.setScale(1)
+  W.nextFrame()
+  fx("demo")
+end)
+
+test("dev: the picker takes the innermost element when mounted trees overlap", function()
+  -- Empty full-screen trees (an empty toast stack, an overlay) over a window
+  -- must not hide the window's elements, whichever tree is visited first.
+  local overlays = {}
+  for i = 1, 8 do
+    local host = CreateFrame("Frame", nil, UIParent)
+    host:SetAllPoints(UIParent)
+    overlays[i] = UI.mount(host, UI.VStack {})
+  end
+  local root = UI.mount(UIParent, UI.Window { title = "Under", width = 300, height = 200,
+    UI.HStack { padding = 10, UI.Button { text = "Target" } } })
+  W.nextFrame()
+  local button = find(root, "Button", function(n) return n.el.props.text == "Target" end)[1]
+  local l, b, w, h = button.region:GetRect()
+  W.cursorX, W.cursorY = l + w / 2, b + h / 2
+  fx("dev pick")
+  W.nextFrame()
+  local picker = pickerFrame()
+  eq(picker.selected, button, "innermost element: " .. picker.label:GetText())
+  picker:_fire("OnMouseWheel", 1)
+  W.nextFrame()
+  eq(picker.selected, button.parent, "the wheel walks up the window's own chain")
+  picker:_fire("OnKeyDown", "ESCAPE")
+  root:unmount()
+  for _, o in ipairs(overlays) do o:unmount() end
+end)
+
+test("dev: /fx dev opens the dev window with capture and demo controls", function()
+  fx("dev")
+  W.nextFrame()
+  local root = rootNamed("FxDevWindow")
+  ok(root, "dev window mounted")
+  -- It refreshes every second, the first time right after mounting.
+  W.advance(0.2)
+  W.nextFrame()
+  ok(FxUIDevCharDB.devOpen == true, "open state saved")
+  local function button(text)
+    return find(root, "Button", function(n) return n.el.props.text == text end)[1]
+  end
+  local function texts()
+    local out = {}
+    for _, n in ipairs(find(root, "Text")) do out[#out + 1] = tostring(n.el.props.text) end
+    return table.concat(out, "\n")
+  end
+  ok(button("Pick element") and button("Snapshot all") and button("Settings"), "inspect buttons present")
+  local facts = texts()
+  ok(facts:find("12.1.5 (70529)", 1, true) and facts:find("120105", 1, true), "client facts:\n" .. facts)
+  ok(facts:find("stored", 1, true), "last snapshot shown")
+  ok(facts:find("/fx demo", 1, true) and facts:find("/fx dev", 1, true), "commands listed")
+  ok(facts:find("FxDevWindow", 1, true), "mounted trees listed")
+  ok(facts:find("active", 1, true) and facts:find("pooled", 1, true), "region statistics")
+
+  button("Demo").region:_click()
+  W.nextFrame()
+  ok(rootNamed("DemoApp"), "demo opened from the dev window")
+  ok(button("Close demo"), "demo button reflects the open demo")
+  ok(FxUIDevCharDB.demoOpen == true, "demo state saved")
+  button("Settings").region:_click()
+  ok(W.settings.opened, "settings opened")
+  local reloads = W.reloads or 0
+  button("Reload").region:_click()
+  eq(W.reloads, reloads + 1, "reload button reloads")
+  local count = #FxUIDevDB.snapshots
+  button("Snapshot all").region:_click()
+  eq(#FxUIDevDB.snapshots, math.min(count + 1, 5), "snapshot all")
+  eq(W.reloads, reloads + 2, "and reloads")
+
+  -- Theme buttons for every registered theme.
+  button("FxUI Teal").region:_click()
+  W.nextFrame()
+  eq(UI.themeName, "teal")
+  button("FxUI Dark").region:_click()
+  W.nextFrame()
+  eq(UI.themeName, "default")
+
+  -- FxUI scale in 5 % steps, reset to 100 %, link to the FxUI options.
+  button("+").region:_click()
+  W.nextFrame()
+  ok(math.abs(UI.scale - 1.05) < 1e-9, "larger")
+  ok(button("105%"), "shows the percentage")
+  button("\226\136\146").region:_click()
+  button("\226\136\146").region:_click()
+  W.nextFrame()
+  ok(math.abs(UI.scale - 0.95) < 1e-9, "smaller")
+  button("95%").region:_click()
+  W.nextFrame()
+  eq(UI.scale, 1, "back to 100%")
+  button("Options").region:_click()
+  eq(W.settings.opened, I.settingsCategory:GetID(), "FxUI options")
+
+  -- Errors: count, the newest three, Clear.
+  I.errors = I.errors or {}
+  for i = 1, 4 do I.errors[#I.errors + 1] = { time = 0, message = "dev error " .. i .. "\nstack" } end
+  W.advance(1.1)
+  W.nextFrame()
+  facts = texts()
+  ok(facts:find("dev error 4", 1, true) and facts:find("dev error 2", 1, true) and not facts:find("dev error 1", 1, true), "newest three:\n" .. facts)
+  button("Clear").region:_click()
+  W.nextFrame()
+  eq(#I.errors, 0, "cleared")
+  ok(not button("Clear"), "nothing to clear")
+
+  -- Pick element toggles the picker; Esc and the button itself stop it.
+  button("Pick element").region:_click()
+  W.nextFrame()
+  ok(pickerFrame():IsShown(), "picking")
+  local toggle = button("Picking\226\128\166 (Esc)")
+  ok(toggle, "button shows picking state")
+  local l, b, w, h = toggle.region:GetRect()
+  W.cursorX, W.cursorY = l + w / 2, b + h / 2
+  W.nextFrame()
+  eq(pickerFrame().selected, nil, "the toggle button itself is never selected")
+  eq(pickerFrame().label:GetText(), "Click to stop picking")
+  local snaps = #FxUIDevDB.snapshots
+  local last = FxUIDevDB.snapshots[snaps]
+  pickerFrame():_fire("OnMouseDown", "LeftButton")
+  ok(not pickerFrame():IsShown(), "clicking the toggle stops picking")
+  eq(FxUIDevDB.snapshots[snaps], last, "no snapshot taken")
+  W.nextFrame()
+  button("Pick element").region:_click()
+  W.nextFrame()
+  button("Picking\226\128\166 (Esc)").region:_click()
+  ok(not pickerFrame():IsShown(), "the button stops picking")
+  W.nextFrame()
+  button("Pick element").region:_click()
+  pickerFrame():_fire("OnKeyDown", "A")
+  ok(pickerFrame():IsShown() and pickerFrame()._propagate == true, "other keys pass through")
+  pickerFrame():_fire("OnKeyDown", "ESCAPE")
+  ok(not pickerFrame():IsShown() and pickerFrame()._propagate == false, "Esc stops picking and is consumed")
+  W.nextFrame()
+  ok(button("Pick element"), "button back to idle")
+
+  -- In combat the reload action is disabled.
+  W.combat = true
+  W.fireEvent("PLAYER_REGEN_DISABLED")
+  W.advance(1.1)
+  W.nextFrame()
+  ok(button("Reload").el.props.disabled, "reload disabled in combat")
+  W.combat = false
+  W.fireEvent("PLAYER_REGEN_ENABLED")
+  W.advance(1.1)
+  W.nextFrame()
+  ok(not button("Reload").el.props.disabled, "enabled again after combat")
+
+  -- Position and size are remembered per character.
+  local frame = find(root, "Window")[1].region
+  frame:SetSize(400, 360)
+  frame:_fireSize()
+  W.nextFrame()
+  ok(FxUIDevCharDB.devWindow.width == 400 or FxUIDevCharDB.devWindow.w == 400 or next(FxUIDevCharDB.devWindow), "geometry saved")
+
+  button("Close demo").region:_click()
+  W.nextFrame()
+  find(root, "Window")[1].region.close:_click()
+  W.nextFrame()
+  ok(not rootNamed("FxDevWindow") and not rootNamed("DemoApp"), "both closed")
+  eq(FxUIDevCharDB.devOpen, false)
+end)
+
+test("dev: reopens the dev window and demo after a reload when enabled", function()
+  FxUIDevCharDB.devOpen, FxUIDevCharDB.demoOpen = true, true
+  chat(function() W.fireEvent("PLAYER_LOGIN") end)
+  W.nextFrame()
+  ok(rootNamed("FxDevWindow"), "dev window restored")
+  ok(rootNamed("DemoApp"), "demo restored")
+  fx("dev")
+  fx("demo")
+  W.nextFrame()
+  FxUIDevCharDB.devOpen, FxUIDevCharDB.demoOpen = true, true
+  FxUIDevCharDB.restore = false
+  chat(function() W.fireEvent("PLAYER_LOGIN") end)
+  W.nextFrame()
+  ok(not rootNamed("FxDevWindow") and not rootNamed("DemoApp"), "not restored when the setting is off")
+  FxUIDevCharDB.restore, FxUIDevCharDB.devOpen, FxUIDevCharDB.demoOpen = true, false, false
+end)
+
+test("dev: settings registered in the options panel and honoured", function()
+  local category
+  for _, c in ipairs(W.settings.categories) do
+    if c.name == "FxUI Dev" then category = c end
+  end
+  ok(category and category.registered, "category registered")
+  local restore = W.settings.settings.FXUI_DEV_RESTORE
+  local reload = W.settings.settings.FXUI_DEV_SNAPSHOTRELOAD
+  ok(restore and restore.checkbox and reload and reload.checkbox, "checkboxes created")
+  eq(restore:GetValue(), true, "reopen after reload defaults on")
+  eq(reload:GetValue(), true, "reload after a snapshot defaults on")
+  local buttons = {}
+  for _, init in ipairs(W.settings.initializers) do buttons[init.name] = init end
+  ok(buttons["Dev window"] and buttons["Component demo"], "open buttons added")
+  buttons["Dev window"].onClick()
+  W.nextFrame()
+  ok(rootNamed("FxDevWindow"), "the settings button opens the dev window")
+  buttons["Dev window"].onClick()
+  ok(rootNamed("FxDevWindow"), "and leaves it open")
+  buttons["Component demo"].onClick()
+  W.nextFrame()
+  ok(rootNamed("DemoApp"), "the settings button toggles the demo")
+  buttons["Component demo"].onClick()
+  W.nextFrame()
+  ok(not rootNamed("DemoApp"))
+
+  reload:SetValue(false)
+  W.nextFrame()
+  local said
+  local before = W.reloads or 0
+  said = chat(function() fx("dev all") end)
+  eq(W.reloads or 0, before, "no reload when the setting is off")
+  ok(said:find("next reload or logout", 1, true), "says when it reaches disk: " .. said)
+  reload:SetValue(true)
+  fx("dev all")
+  eq(W.reloads, before + 1, "reloads when on")
+  fx("dev")
+  W.nextFrame()
+end)
+
+test("dev: the FxUI scale resizes the demo, keeps its spot and saves it with its geometry", function()
+  fx("demo")
+  W.nextFrame()
+  local root = rootNamed("DemoApp")
+  local f = find(root, "Window")[1].region
+  eq(f:GetScale(), 1, "starts at 100%")
+  local left, top = f:GetLeft(), f:GetTop()
+  UI.setScale(0.8)
+  eq(f:GetScale(), 0.8, "window scaled")
+  local p = f._points[1]
+  ok(math.abs(p[4] - left / 0.8) < 0.01 and math.abs(p[5] - top / 0.8) < 0.01, "top-left kept on screen")
+  eq(FxUIDevCharDB.window.scale, 0.8, "demo geometry saved with its scale")
+  UI.setScale(1)
+  fx("demo")
+  W.nextFrame()
+  fx("demo")
+  W.nextFrame()
+  local f2 = find(rootNamed("DemoApp"), "Window")[1].region
+  eq(f2:GetScale(), 1, "reopened at the current scale")
+  fx("demo")
+end)
+
+---------------------------------------------------------------------------
 
 for _, t in ipairs(tests) do
   W.errors = {}

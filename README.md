@@ -28,8 +28,10 @@ Status: early. Developed against the retail client.
 | `FxUI/` | The library addon (`FxUI-1.0` via LibStub) |
 | `FxUI_Theme_Classic/` | Theme: vanilla-era frames, buttons, checkboxes, tabs, fonts and coin icons from the client's own art |
 | `FxUI_Theme_Teal/` | Theme: the default dark theme with a teal accent (a minimal theme addon) |
+| `FxUI_Dev/` | Developer tools: a dev window (`/fx dev`), a gallery of every component (`/fx demo`), an element picker and snapshots of the live UI for offline inspection |
 | `tests/` | Headless tests against a strict stand-in for the client API, and the coverage gate |
-| `tools/` | Font and texture generators |
+| `tools/` | Snapshot reader (`inspect.lua`), font and texture generators |
+| `.agents/skills/fxui/` | Agent skill for developing and inspecting FxUI in the client (linked from `.claude/skills/`) |
 | `docs/` | Specs and change documents |
 
 ## Development workflow
@@ -40,15 +42,25 @@ Status: early. Developed against the retail client.
    ln -s "$PWD/FxUI" "<WoW>/_retail_/Interface/AddOns/FxUI"
    ln -s "$PWD/FxUI_Theme_Classic" "<WoW>/_retail_/Interface/AddOns/FxUI_Theme_Classic"
    ln -s "$PWD/FxUI_Theme_Teal" "<WoW>/_retail_/Interface/AddOns/FxUI_Theme_Teal"
+   ln -s "$PWD/FxUI_Dev" "<WoW>/_retail_/Interface/AddOns/FxUI_Dev"
    ```
 
-   The client finds new addons and new `.toc` entries only at startup; restart it after linking.
+   The client finds new addons, new `.toc` entries and key bindings only at startup; restart it after linking.
 
 2. **Run the headless tests** after every change: `mise run test` (or `lua tests/run.lua`). `mise install` sets up the tools from `mise.toml`: Lua 5.1, the client's Lua, and Python with fontTools for the media generators. The stand-in in `tests/wow.lua` rejects client API methods it does not know, so a misspelt call fails here rather than in game. Add new APIs to it as FxUI starts using them.
 
 3. **Check coverage** before opening a pull request: `mise run coverage` runs the tests under luacov and fails below 80 % line coverage (install luacov once with `luarocks install luacov`). CI runs both.
 
-4. **Look at it in game.** `/reload`; `/fx` lists every registered command. Lua errors from FxUI go through the client's error handler, so an error addon such as BugSack shows them.
+4. **Look at it in game.** `/reload`, then `/fx dev` for the dev window: capture buttons, the demo, theme switching, the FxUI scale, library and client facts, recent FxUI errors. `/fx demo` opens the demo directly; `/fx` lists every registered command. Options → AddOns → FxUI Dev has the settings, including reopening the dev window and demo after each reload. Lua errors from FxUI go through the client's error handler, so an error addon such as BugSack shows them.
+
+5. **Inspect what the client actually did** instead of guessing from screenshots:
+   - **Pick element** (dev window, `/fx dev pick` or a key binding): hover an element (a box shows the selection, its path and size), wheel to its parent or child, click. The UI reloads and the snapshot is written to `<WoW>/_retail_/WTF/Account/<ACCOUNT>/SavedVariables/FxUI_Dev.lua`.
+   - **Snapshot all** (dev window, `/fx dev all` or a key binding): every mounted FxUI tree, from every addon using FxUI. `/fx dev all FrameName` adds any named frame; `-n` skips the reload.
+   - Read it: `mise run inspect <that file>` (or `lua tools/inspect.lua <that file>`). It prints each tree with the client's own sizes, positions, fonts, colors and truncation, flags problems (truncated text, overflow, content in the padding, size different from layout, missing anchors, non-finite geometry) and gives screen-pixel rects for cropping screenshots. `--node ID`, `--parts`, `--props`, `--frames`, `--snapshot -1`, `--list`.
+
+6. **Screenshots** only for what a snapshot cannot show: texture quality, slicing artifacts, how colors read against the game world, overlap with frames FxUI does not own.
+
+Agents: the `fxui` skill (`.agents/skills/fxui/SKILL.md`) walks through this loop.
 
 ## Slash commands
 
@@ -58,7 +70,7 @@ FxUI owns one `/fx` command shared by every addon that uses it. Register a subco
 UI.registerCommand("myaddon", function(args) MyAddon:Toggle(args) end, "open My Addon")
 ```
 
-`/fx` lists every registered subcommand with its help text.
+`/fx` lists every registered subcommand with its help text. FxUI Dev registers `/fx dev` (the dev window; `/fx dev pick` and `/fx dev all [FrameName ...] [-n]` for snapshots) and `/fx demo` (the component demo).
 
 ## Themes
 
@@ -90,7 +102,7 @@ Anything not given is inherited from `base`. Skins take over a component's drawi
 
 ## Scale
 
-FxUI windows follow their own scale on top of the game's UI scale, so they can be made smaller than the game's minimum UI scale allows (or larger). Options → AddOns → FxUI has the slider; `UI.setScale(0.8)` sets it from code.
+FxUI windows follow their own scale on top of the game's UI scale, so they can be made smaller than the game's minimum UI scale allows (or larger). Options → AddOns → FxUI has the slider; `UI.setScale(0.8)` sets it from code; the dev window has quick −/+ buttons.
 
 ## Media
 

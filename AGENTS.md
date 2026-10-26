@@ -16,3 +16,7 @@ This repository is public. FxUI is a general-purpose personal WoW UI component l
 - Coverage policy: CI fails when line coverage of the repository's own Lua code is below **80 %**. It is measured with luacov over every Lua file the tests load, excluding `tests/` and vendored third-party code in any `Libs/` folder (`.luacov`). New code comes with the tests that keep the total at or above 80 %; do not lower the threshold or widen the exclusions to get a change through.
 - Run it locally: `luarocks install luacov` once (into the Lua that `mise install` set up), then `mise run coverage`. It runs the tests under luacov and `tests/coverage.lua`, which prints each file's coverage, lowest first, and exits non-zero below 80 %.
 - CI (`.github/workflows/ci.yml`) runs the tests and the coverage gate on every pull request and every push to `main`.
+
+## Developing in the Client
+
+The `fxui` agent skill (`.agents/skills/fxui/SKILL.md`, linked from `.claude/skills/fxui`) covers developing against the live client: linking the addons, the FxUI Dev tools (`/fx dev`, `/fx demo`), taking snapshots and reading them with `tools/inspect.lua`. Keep it current and generic when the tools change.

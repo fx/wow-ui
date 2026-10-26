@@ -5,7 +5,7 @@
 Deliver the developer tools: the `FxUI_Dev` addon (dev window, component demo, snapshots, element picker, settings, key bindings), the snapshot reader `tools/inspect.lua`, and the `fxui` agent skill, with their tests, and extend CI and the coverage gate to them. The behaviour delivered is owned by the [dev tools](../specs/dev-tools/) spec.
 
 **Spec:** [Dev tools](../specs/dev-tools/)
-**Status:** draft
+**Status:** complete
 **Depends On:** 0001, 0002
 
 ## Motivation
@@ -61,14 +61,14 @@ The addon, reader and skill are taken from the working implementation as they ar
 
 ## Tasks
 
-- [ ] Deliver the dev tools, reader and agent skill with their tests and CI coverage (one PR)
-  - [ ] `FxUI_Dev/`: `FxUI_Dev.toc`, `Bindings.xml`, `Demo.lua`, `Dev.lua`
-  - [ ] Snapshot reader: `tools/inspect.lua`, and the `inspect` task in `mise.toml`
-  - [ ] Agent skill: `.agents/skills/fxui/SKILL.md` and the `.claude/skills/fxui` link
-  - [ ] Tests: the dev-tool tests listed in Functional requirements, plus whatever the coverage gate needs
-  - [ ] CI: coverage measured over `FxUI_Dev/` and `tools/inspect.lua` as well
-  - [ ] README development-workflow, slash-command and dev-tool sections
-  - [ ] Tracking: mark these tasks done and set this document, `docs/index.yml` and `docs/index.md` to `complete`
+- [x] Deliver the dev tools, reader and agent skill with their tests and CI coverage (one PR)
+  - [x] `FxUI_Dev/`: `FxUI_Dev.toc`, `Bindings.xml`, `Demo.lua`, `Dev.lua`
+  - [x] Snapshot reader: `tools/inspect.lua`, and the `inspect` task in `mise.toml`
+  - [x] Agent skill: `.agents/skills/fxui/SKILL.md` and the `.claude/skills/fxui` link
+  - [x] Tests: the dev-tool tests listed in Functional requirements, plus whatever the coverage gate needs
+  - [x] CI: coverage measured over `FxUI_Dev/` and `tools/inspect.lua` as well
+  - [x] README development-workflow, slash-command and dev-tool sections
+  - [x] Tracking: mark these tasks done and set this document, `docs/index.yml` and `docs/index.md` to `complete`
 
 ## Open Questions
 

@@ -29,7 +29,7 @@ FxUI Dev MUST register these `/fx` subcommands ([architecture](../architecture/#
 
 ### Snapshots
 
-- A snapshot MUST record every mounted FxUI tree from every addon: for each node its id, key, component or host name, props and component state (functions, elements, regions and large tables summarised), render count, theme where it differs from its parent's, effective scale, scroll offsets and ranges, the layout box FxUI computed, and what the client reports about its region and every sub-region (type, rect, shown and visible state, alpha, text, font, text color, string widths and truncation for font strings; texture file, vertex color, slice margins, texture coordinates, blend mode and draw layer for textures; strata, level, mouse, clipping and enabled state for frames).
+- A snapshot MUST record every mounted FxUI tree from every addon: for each node its id, key, component or host name, props and component state (functions, elements, regions and large tables summarised), render count, theme where it differs from its parent's, effective scale, scroll offsets and ranges, the layout box FxUI computed, and what the client reports about its region and every sub-region, nested sub-frames included (type, rect, a sub-frame's effective scale where it differs from its frame's, shown and visible state, alpha, text, font, text color, string widths and truncation for font strings; texture file, vertex color, slice margins, texture coordinates, blend mode and draw layer for textures; strata, level, mouse, clipping and enabled state for frames).
 - A snapshot MUST also record its time, the FxUI version, the global theme, the UI scale, the FxUI scale, the UI size and the physical screen size, the client version, build and interface, region statistics, what is under the mouse (with FxUI node ids), any requested named frames (or that they were not found), the node selected with the picker, and FxUI's recent errors.
 - FxUI Dev MUST keep the five most recent snapshots, dropping the oldest.
 - Taking a snapshot MUST be refused in combat, with a chat message.
@@ -109,8 +109,9 @@ FxUI Dev MUST register Options → AddOns → FxUI Dev with, per character:
 | `--list` | List stored snapshots (date, roots, errors) and exit |
 
 - The reader MUST print a header (snapshot number and date, client version, build and interface, FxUI version, UI size and scale, FxUI scale, screen size, theme, region statistics), the snapshot's errors, what was under the mouse, the picked selection (with its screen-pixel rect) when there is one, then every root's tree with each node's position relative to its parent and size, and finally a list of every flagged issue (or "No layout issues flagged.").
+- Rects are in each region's own scale, so the reader MUST bring every pair it compares or subtracts to one scale: a node's position, size and flags are in its own units, with its parent's box (or the UI's, for a root, the selection and `--node`) and its sub-regions converted to them; a node or sub-frame without a recorded scale takes its parent's, and a snapshot without scales is read as is. It MUST mark a node whose scale differs from its parent's with `[scale xN]`, N relative to the UI scale.
 - It MUST mark hovered nodes `<== HOVER` and the picked node `<== SELECTED`.
-- It MUST flag: `TRUNCATED` text (in the node or one of its parts); `ZERO` size for a visible region; `NO-RECT` for a visible region without a rect; `NONFINITE` geometry; `SIZE` when the client's size differs from FxUI's layout; `OVERFLOW` when a node sticks out of its parent (not counting content inside scroll areas and lists); `PADDING` when a child of a padded stack reaches into the padding; and `OVERFLOW(<part>)` when a label or sub-frame sticks out of its node.
+- It MUST flag: `TRUNCATED` text (in the node or one of its parts); `ZERO` size for a visible region; `NO-RECT` for a visible region without a rect; `NONFINITE` geometry; `SIZE` when the client's size differs from FxUI's layout; `OVERFLOW` when a node sticks out of its parent (not counting content inside scroll areas and lists); `PADDING` when a child of a padded stack reaches into the padding; `OVERFLOW(<part>)` when a label or sub-frame sticks out of its node; and `NONFINITE(<part>)` for a sub-region with non-finite geometry. Sub-region checks MUST cover sub-regions at every depth (a title inside a header frame), skip everything inside a hidden sub-frame, and skip overflow inside a clipping sub-frame or a scroll area's content; `--parts` MUST list every depth.
 - Screen-pixel rects MUST be given as `x,y wxh` from the top-left of the client area together with an ImageMagick crop geometry, so a screenshot can be cropped to the element.
 - The reader MUST read non-finite numbers the client writes (`nan`, `inf`) without failing.
 - It MUST exit with status 2 and a usage line when no file is given, and 1 when the file holds no snapshots.
@@ -120,6 +121,18 @@ FxUI Dev MUST register Options → AddOns → FxUI Dev with, per character:
 - **GIVEN** a snapshot in which a region's rect contains `nan`
 - **WHEN** the reader prints it
 - **THEN** it does not fail and flags that node `NONFINITE`
+
+#### Scenario: A window at half the UI's scale
+
+- **GIVEN** a snapshot of a 1000-unit-wide UI with a window at half its scale whose rect, in the window's units, spans x 1200 to 1600
+- **WHEN** the reader prints it
+- **THEN** it does not flag the window (it spans x 600 to 800 of the UI), gives its position in the window's units, and marks it `[scale x0.50]`
+
+#### Scenario: A truncated title inside a header frame
+
+- **GIVEN** a node whose header sub-frame holds a truncated title, and whose hidden sub-frame holds another
+- **WHEN** the reader prints it
+- **THEN** it flags `TRUNCATED(title)` and nothing from the hidden sub-frame
 
 ### Agent skill
 
@@ -143,7 +156,8 @@ The reader also accepts snapshots stored under the earlier `FxUIInspectDB` name.
 { id = 12, key = "k:3", host = "Button", props = { text = "Go", onClick = "<fn>" },
   layout = { x, y, w, h }, scale = 1, scroll = { offsetX, maxX, offsetY, maxY },
   region = { type = "Button", rect = { left, bottom, w, h }, shown = true, visible = true, ... },
-  parts = { { field = "label", type = "FontString", text = "Go", font = { file, size }, ... } },
+  parts = { { field = "label", type = "FontString", text = "Go", font = { file, size }, ... },
+            { field = "badge", type = "Frame", scale = 0.5, parts = { ... } } },
   children = { ... } }
 ```
 
