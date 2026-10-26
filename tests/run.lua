@@ -2878,6 +2878,48 @@ test("classic: missing secondary art while the primary art ships falls back per 
   I.wipe(I.textureCache)
 end)
 
+test("classic: conditional decorations hide again on update and on pooled reuse", function()
+  local function view(title, sortable)
+    return UI.Window { title = title, width = 400, height = 300, theme = "classic",
+      UI.Table { flex = 1, items = { { id = 1, v = "a" } }, key = "id",
+        columns = { { key = "v", title = "Value", flex = 1, sortable = sortable } } },
+    }
+  end
+  local function bannerShown(win)
+    local t = win.header.fxSkinTex
+    if not t then return false end
+    for _, k in ipairs({ "bannerL", "bannerM", "bannerR" }) do
+      if t[k] and t[k]:IsShown() then return true end
+    end
+    return false
+  end
+  local root = UI.mount(UIParent, view("Titled"))
+  local win = find(root, "Window")[1].region
+  ok(bannerShown(win), "banner on a titled window")
+  root:update(view(""))
+  ok(not bannerShown(win), "banner hidden once the title is empty")
+  root:update(view("Again"))
+  ok(bannerShown(win), "banner back with a title")
+  root:update(view(nil))
+  ok(not bannerShown(win), "banner hidden once the title is omitted")
+  root:update(view("Titled"))
+  -- Table headers: the highlight only while the column sorts.
+  local header = find(root, "HeaderCell")[1].region
+  ok(header.fxSkinTex.hl:IsShown(), "sortable header highlight")
+  root:update(view("Titled", false))
+  header = find(root, "HeaderCell")[1].region
+  ok(not (header.fxSkinTex.hl and header.fxSkinTex.hl:IsShown()), "no highlight once the column cannot sort")
+  root:unmount()
+  -- A pooled titled window reused for an untitled Classic window.
+  root = UI.mount(UIParent, view(nil, false))
+  local reused = find(root, "Window")[1].region
+  eq(reused, win, "the pooled window is reused")
+  ok(not bannerShown(reused), "no banner left over from the titled window")
+  header = find(root, "HeaderCell")[1].region
+  ok(not (header.fxSkinTex and header.fxSkinTex.hl and header.fxSkinTex.hl:IsShown()), "no header highlight left over")
+  root:unmount()
+end)
+
 test("classic: layout invariants hold over representative trees at several sizes", function()
   layoutInvariants("classic")
 end)

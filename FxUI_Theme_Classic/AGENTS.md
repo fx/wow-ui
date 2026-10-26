@@ -7,6 +7,7 @@ Notes for working on this theme. General FxUI development (tests, coverage, link
 - Only client art that still ships in retail. Before using a texture, check that a current retail addon references it (grep the installed addons) and keep the `has(path)` fallback to flat drawing; missing files are reported once.
   - Probe every file on its own, secondary art included: a checkbox whose box ships but whose check does not draws a flat check inside the box art; highlights go through `highlight()`, which probes the file and hides the highlight when it is missing.
   - Backdrops go through `backdrop()`, which probes both of their files and removes any earlier backdrop when it falls back; the card, toast and inset surfaces are registered only when the tooltip art ships.
+  - A decoration drawn only under a condition (title banner, sortable-header highlight, inactive-tab highlight) is hidden whenever the condition is false: the core keeps skin textures on the skinned path, so a pooled or updated region still carries them.
 - Original layouts: Blizzard's FrameXML, mirrored at github.com/Gethe/wow-ui-source (`classic_era` branch). `Interface/ui-code-list.txt` lists the files. Key files:
   - `Interface/AddOns/Blizzard_SharedXML/Classic/SharedUIPanelTemplates.xml` / `.lua`: `TabButtonTemplate` (classic top tabs), `PanelTemplates_SelectTab` / `DeselectTab` / `TabResize`.
   - `Interface/AddOns/Blizzard_MacroUI/Blizzard_MacroUI.xml`: a classic frame with top tabs over an inset panel.

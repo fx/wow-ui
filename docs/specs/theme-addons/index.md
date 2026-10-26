@@ -75,6 +75,14 @@ Classic MUST draw each component with client art as follows, keeping the behavio
 - **WHEN** the same tree re-renders under the default theme
 - **THEN** the tab art, banner and row highlights are hidden, tabs carry no underline, and the default rail is continuous with the selected tab marked on it
 
+- Classic MUST draw the title banner only while the window has a non-empty title, and MUST hide every decoration it draws under a condition (banner, header and tab highlights) whenever that condition is false, on update and when a pooled region is reused.
+
+#### Scenario: Window loses its title
+
+- **GIVEN** a titled Classic window
+- **WHEN** it updates with an empty or omitted title, or its pooled region is reused for an untitled Classic window
+- **THEN** no banner slice is shown
+
 ### Classic: missing art
 
 - Before drawing with a client file, Classic MUST check that the client ships it; for a missing file it MUST draw that part with FxUI's own or flat drawing and report the file once through the error handler ("FxUI Classic: the client has no <path>; using FxUI's own drawing for it").

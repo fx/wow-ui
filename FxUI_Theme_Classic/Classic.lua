@@ -335,6 +335,10 @@ skins.Window = {
       right:SetPoint("LEFT", mid, "RIGHT")
       f.title:ClearAllPoints()
       f.title:SetPoint("TOP", mid, "TOP", 0, -14)
+    else
+      -- An untitled (or banner-less) window, also a pooled one that had a
+      -- banner: the core keeps skin textures on the skinned path.
+      hideSlices(f.header, "banner")
     end
   end,
   paintFooter = function(footer)
