@@ -1903,6 +1903,40 @@ test("scroll: content keeps its natural size along every scrolling axis", functi
   root:unmount()
 end)
 
+test("layout: text that stops wrapping is measured at one line, also from a pooled region", function()
+  local long = string.rep("word ", 8)
+  local function tree()
+    return UI.VStack { align = "start", UI.Text { text = long, wrap = true }, UI.Button { text = "Go" } }
+  end
+  -- Reference: the tree laid out at 800 from fresh.
+  local host = CreateFrame("Frame")
+  host:SetSize(800, 400)
+  local root = UI.mount(host, tree())
+  local wantH, wantY = find(root, "Text")[1].h, find(root, "Button")[1].y
+  root:unmount()
+  ok(wantH < 20, "one line at 800, got " .. tostring(wantH))
+
+  -- Wrapped at 100, then widened to 800: one layout gets it right.
+  host:SetSize(100, 400)
+  root = UI.mount(host, tree())
+  ok(find(root, "Text")[1].h > wantH, "wraps at 100")
+  host:SetSize(800, 400)
+  UI.flush()
+  eq(find(root, "Text")[1].h, wantH, "widened: the text is one line high")
+  eq(find(root, "Button")[1].y, wantY, "widened: the button follows the text")
+  root:unmount()
+
+  -- A pooled region that last held wrapped text at 100 measures the same.
+  host:SetSize(100, 400)
+  root = UI.mount(host, UI.Text { text = long, wrap = true })
+  root:unmount()
+  host:SetSize(800, 400)
+  root = UI.mount(host, tree())
+  eq(find(root, "Text")[1].h, wantH, "pooled: the text is one line high")
+  eq(find(root, "Button")[1].y, wantY, "pooled: the button follows the text")
+  root:unmount()
+end)
+
 test("table: mixed-type columns sort the same way from every starting order", function()
   local values = { 2, 10, "11", "b", "A" }
   local function permutations(list)

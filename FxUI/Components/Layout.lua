@@ -80,9 +80,10 @@ I.defineHost("Dot", {
 })
 
 -- Measure a font string: unbounded width, or wrapped height inside maxW.
--- The client reports a wrapped height only within the string's current
--- height, so clear that first (height 0 = automatic), and never trust a
--- result below what the line count needs.
+-- The client reports a string's height within its current size, so every
+-- branch sets the size it measures at first (0 = automatic: unbounded width,
+-- or a height that fits the lines), and never trusts a wrapped result below
+-- what the line count needs.
 function I.measureString(fs, maxW, wrap)
   local w = fs.GetUnboundedStringWidth and fs:GetUnboundedStringWidth() or fs:GetStringWidth()
   local _, size = fs:GetFont()
@@ -96,6 +97,7 @@ function I.measureString(fs, maxW, wrap)
     local h = math.max(fs:GetStringHeight(), lines * lineH, size)
     return math.ceil(maxW), math.ceil(h)
   end
+  fs:SetSize(0, 0)
   return math.ceil(w) + 1, math.ceil(math.max(fs:GetStringHeight(), size))
 end
 
