@@ -19,5 +19,5 @@
 | # | Change | Spec | Status | Depends On |
 |---|--------|------|--------|------------|
 | 0001 | [FxUI Core Library](changes/0001-fxui-core.md) | [Architecture](specs/architecture/) | complete | — |
-| 0002 | [Theme Addons](changes/0002-theme-addons.md) | [Theme Addons](specs/theme-addons/) | draft | 0001 |
+| 0002 | [Theme Addons](changes/0002-theme-addons.md) | [Theme Addons](specs/theme-addons/) | complete | 0001 |
 | 0003 | [Dev Tools](changes/0003-dev-tools.md) | [Dev Tools](specs/dev-tools/) | draft | 0001, 0002 |

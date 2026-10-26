@@ -5,7 +5,7 @@
 Deliver the two theme addons, `FxUI_Theme_Classic` and `FxUI_Theme_Teal`, with their tests, and extend CI and the coverage gate to them. The behaviour delivered is owned by the [theme addons](../specs/theme-addons/) spec; the engine they plug into by [theming](../specs/theming/).
 
 **Spec:** [Theme addons](../specs/theme-addons/)
-**Status:** draft
+**Status:** complete
 **Depends On:** 0001
 
 ## Motivation
@@ -60,13 +60,13 @@ The theme addons are taken from the working implementation as they are. The test
 
 ## Tasks
 
-- [ ] Deliver the Classic and Teal theme addons with their tests and CI coverage (one PR)
-  - [ ] `FxUI_Theme_Classic/`: `FxUI_Theme_Classic.toc`, `Classic.lua`, `AGENTS.md`, `CLAUDE.md`
-  - [ ] `FxUI_Theme_Teal/`: `FxUI_Theme_Teal.toc`, `Teal.lua`
-  - [ ] Tests: the theme-dependent tests listed in Functional requirements, plus a Teal test and whatever the coverage gate needs
-  - [ ] CI: coverage measured over both theme addons as well
-  - [ ] README rows and instruction-file references for the theme addons
-  - [ ] Tracking: mark these tasks done and set this document, `docs/index.yml` and `docs/index.md` to `complete`
+- [x] Deliver the Classic and Teal theme addons with their tests and CI coverage (one PR)
+  - [x] `FxUI_Theme_Classic/`: `FxUI_Theme_Classic.toc`, `Classic.lua`, `AGENTS.md`, `CLAUDE.md`
+  - [x] `FxUI_Theme_Teal/`: `FxUI_Theme_Teal.toc`, `Teal.lua`
+  - [x] Tests: the theme-dependent tests listed in Functional requirements, plus a Teal test and whatever the coverage gate needs
+  - [x] CI: coverage measured over both theme addons as well
+  - [x] README rows and instruction-file references for the theme addons
+  - [x] Tracking: mark these tasks done and set this document, `docs/index.yml` and `docs/index.md` to `complete`
 
 ## Open Questions
 
