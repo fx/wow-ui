@@ -26,16 +26,20 @@ Status: early. Developed against the retail client.
 | Path | What |
 |------|------|
 | `FxUI/` | The library addon (`FxUI-1.0` via LibStub) |
+| `FxUI_Theme_Classic/` | Theme: vanilla-era frames, buttons, checkboxes, tabs, fonts and coin icons from the client's own art |
+| `FxUI_Theme_Teal/` | Theme: the default dark theme with a teal accent (a minimal theme addon) |
 | `tests/` | Headless tests against a strict stand-in for the client API, and the coverage gate |
 | `tools/` | Font and texture generators |
 | `docs/` | Specs and change documents |
 
 ## Development workflow
 
-1. **Link the addon** into the client so edits apply on `/reload`:
+1. **Link the addons** into the client so edits apply on `/reload`:
 
    ```sh
    ln -s "$PWD/FxUI" "<WoW>/_retail_/Interface/AddOns/FxUI"
+   ln -s "$PWD/FxUI_Theme_Classic" "<WoW>/_retail_/Interface/AddOns/FxUI_Theme_Classic"
+   ln -s "$PWD/FxUI_Theme_Teal" "<WoW>/_retail_/Interface/AddOns/FxUI_Theme_Teal"
    ```
 
    The client finds new addons and new `.toc` entries only at startup; restart it after linking.
@@ -58,11 +62,11 @@ UI.registerCommand("myaddon", function(args) MyAddon:Toggle(args) end, "open My 
 
 ## Themes
 
-Every color, font, surface, size and most component drawing comes from a theme. Themes are addons that register themselves; the default dark theme is built in, because every theme inherits from it and FxUI must work with no theme installed.
+Every color, font, surface, size and most component drawing comes from a theme. Themes are addons that register themselves; the default dark theme is built in, because every theme inherits from it and FxUI must work with no theme installed. Two theme addons ship here: Classic (`classic`) and FxUI Teal (`teal`).
 
 Which theme applies, from most to least specific:
 
-- `theme = "mytheme"` (or a theme table) on any element: that element and everything under it.
+- `theme = "classic"` (or a theme table) on any element: that element and everything under it.
 - `UI.mount(frame, el, { theme = ... })`: a whole tree.
 - The global theme: Options → AddOns → FxUI → Theme, or `UI.setTheme(name)`.
 

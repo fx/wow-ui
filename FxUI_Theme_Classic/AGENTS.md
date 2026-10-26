@@ -1,10 +1,10 @@
 # FxUI Theme: Classic
 
-Notes for working on this theme. General FxUI development (snapshots, the dev window, tests) is in `.agents/skills/fxui/SKILL.md` at the repository root.
+Notes for working on this theme. General FxUI development (tests, coverage, linking the addons) is in `README.md` and `AGENTS.md` at the repository root.
 
 ## Where the art and layouts come from
 
-- Only client art that still ships in retail. Before using a texture, check that a current retail addon references it (grep the installed addons) and keep the `has(path)` fallback to flat drawing; missing files are reported once.
+- Only client art that still ships in retail. Before using a texture, check that a current retail addon references it (grep the installed addons) and keep the `has(path)` fallback to flat drawing (backdrops go through `backdrop()`, which probes both of their files; the card, toast and inset surfaces are registered only when the tooltip art ships); missing files are reported once.
 - Original layouts: Blizzard's FrameXML, mirrored at github.com/Gethe/wow-ui-source (`classic_era` branch). `Interface/ui-code-list.txt` lists the files. Key files:
   - `Interface/AddOns/Blizzard_SharedXML/Classic/SharedUIPanelTemplates.xml` / `.lua`: `TabButtonTemplate` (classic top tabs), `PanelTemplates_SelectTab` / `DeselectTab` / `TabResize`.
   - `Interface/AddOns/Blizzard_MacroUI/Blizzard_MacroUI.xml`: a classic frame with top tabs over an inset panel.
@@ -27,4 +27,4 @@ Notes for working on this theme. General FxUI development (snapshots, the dev wi
 
 ## Verifying
 
-The dev test runs every demo tab in Classic at both window sizes. For art alignment, measure a screenshot crop in pixels (see the skill) and record the numbers here.
+The headless tests (`tests/run.lua`, the `classic:` tests) draw every skinned component in Classic in each state, check that pooled regions are clean under the default theme afterwards, run the layout invariants under Classic, and draw everything with every client file missing. They cannot show pixels: for art alignment, measure a screenshot crop in pixels and record the numbers here.
