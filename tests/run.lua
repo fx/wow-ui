@@ -1323,6 +1323,28 @@ test("render: a root update with another key creates a new node", function()
   root:unmount()
 end)
 
+test("layout: wrapped lines honour every justify value", function()
+  local host = CreateFrame("Frame")
+  host:SetSize(300, 600)
+  -- Five 80 px children with gap 10: lines of three (260 px) and two (170 px).
+  local expect = {
+    start = { 0, 90, 180, 0, 90 },
+    center = { 20, 110, 200, 65, 155 },
+    ["end"] = { 40, 130, 220, 130, 220 },
+    between = { 0, 110, 220, 0, 220 },
+  }
+  for justify, xs in pairs(expect) do
+    local kids = {}
+    for i = 1, 5 do kids[i] = UI.HStack { width = 80, height = 20 } end
+    local root = UI.mount(host, UI.VStack { align = "stretch", UI.HStack { wrap = true, gap = 10, justify = justify, kids } })
+    local row = find(root, "HStack", function(n) return n.el.props.wrap end)[1]
+    for i, c in ipairs(row.children) do
+      eq(c.x, xs[i], justify .. ": child " .. i .. " x")
+    end
+    root:unmount()
+  end
+end)
+
 ---------------------------------------------------------------------------
 
 for _, t in ipairs(tests) do

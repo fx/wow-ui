@@ -460,8 +460,16 @@ local function wrapLayout(kids, props, w, h)
   local y = t
   for _, line in ipairs(wrapLines(kids, gap, innerW, innerH)) do
     local free = innerW - line.w
-    local x = l
-    if justify == "center" then x = l + free / 2 elseif justify == "end" then x = l + free end
+    local x, between = l, gap
+    if free > 0 then
+      if justify == "center" then
+        x = l + free / 2
+      elseif justify == "end" then
+        x = l + free
+      elseif justify == "between" and #line.items > 1 then
+        between = gap + free / (#line.items - 1)
+      end
+    end
     for _, item in ipairs(line.items) do
       local a = layoutProp(item.node, "alignSelf") or align
       local cs, co = item.h, 0
@@ -473,7 +481,7 @@ local function wrapLayout(kids, props, w, h)
         co = line.h - cs
       end
       I.place(item.node, x, y + co, item.w, cs)
-      x = x + item.w + gap
+      x = x + item.w + between
     end
     y = y + line.h + rowGap
   end
