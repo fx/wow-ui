@@ -1,5 +1,6 @@
 # Development tools: `mise install` sets up Lua 5.1 (the client's Lua) for
-# the tests, and Python with fontTools for the media generators.
+# the tests and the snapshot reader, and Python with fontTools for the media
+# generators.
 [tools]
 lua = "5.1.5"
 python = "3.13"
@@ -23,6 +24,10 @@ run = [
   "lua -e 'require(\"luacov.reporter\").report()'",
   "lua tests/coverage.lua",
 ]
+
+[tasks.inspect]
+description = "Read an FxUI Dev snapshot: mise run inspect <FxUI_Dev.lua> [options]"
+run = "lua tools/inspect.lua"
 
 [tasks.fonts]
 description = "Generate fonts: mise run fonts <google-fonts-download-dir>"
