@@ -95,7 +95,7 @@ function I.measureString(fs, maxW, wrap)
     -- No narrower than a glyph: a zero-width box would need endless lines.
     local lines = math.ceil(w * 1.08 / math.max(maxW, size))
     local h = math.max(fs:GetStringHeight(), lines * lineH, size)
-    return math.ceil(maxW), math.ceil(h)
+    return maxW, math.ceil(h)
   end
   fs:SetSize(0, 0)
   return math.ceil(w) + 1, math.ceil(math.max(fs:GetStringHeight(), size))
