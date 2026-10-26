@@ -1,6 +1,6 @@
 # FxUI Theme: Classic
 
-Notes for working on this theme. General FxUI development (tests, coverage, linking the addons) is in `README.md` and `AGENTS.md` at the repository root.
+Notes for working on this theme. General FxUI development (tests, coverage, linking the addons) is in `README.md` and `AGENTS.md` at the repository root; snapshots and the dev window are in `.agents/skills/fxui/SKILL.md`.
 
 ## Where the art and layouts come from
 
@@ -31,4 +31,4 @@ Notes for working on this theme. General FxUI development (tests, coverage, link
 
 ## Verifying
 
-The headless tests (`tests/run.lua`, the `classic:` tests) draw every skinned component in Classic in each state, check that pooled regions are clean under the default theme afterwards, run the layout invariants under Classic, and draw everything with every client file missing. Every fallback path (all files missing, secondary files missing, no backdrops) is drawn on fresh regions and on regions the default theme drew, and the two are compared texture by texture: bounds, content, tint, blend, alpha and visibility. They cannot show pixels: for art alignment, measure a screenshot crop in pixels and record the numbers here.
+The headless tests (`tests/run.lua`, the `classic:` tests) draw every skinned component in Classic in each state, check that pooled regions are clean under the default theme afterwards, run the layout invariants under Classic, and draw everything with every client file missing. Every fallback path (all files missing, secondary files missing, no backdrops) is drawn on fresh regions and on regions the default theme drew, and the two are compared texture by texture: bounds, content, tint, blend, alpha and visibility. The dev test snapshots every demo tab in Classic at the default and at the minimum window size and fails on any reader flag except an item name's ellipsis. Neither can show pixels: for art alignment, measure a screenshot crop in pixels (see the skill) and record the numbers here.

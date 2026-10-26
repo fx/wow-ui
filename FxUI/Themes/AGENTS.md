@@ -1,6 +1,6 @@
 # FxUI built-in theme ("default", FxUI Dark)
 
-Notes for working on the built-in theme. General FxUI development is in `README.md` and `AGENTS.md` at the repository root; theme addons keep their own notes next to their code (e.g. `FxUI_Theme_Classic/AGENTS.md`).
+Notes for working on the built-in theme. General FxUI development is in `README.md` and `AGENTS.md` at the repository root (and, for snapshots and the dev window, `.agents/skills/fxui/SKILL.md`); theme addons keep their own notes next to their code (e.g. `FxUI_Theme_Classic/AGENTS.md`).
 
 ## Role
 
