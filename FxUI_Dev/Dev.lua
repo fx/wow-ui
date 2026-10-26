@@ -171,10 +171,15 @@ local function frameParts(frame, depth, names)
   end
   if depth < MAX_DEPTH then
     local children = { try(frame.GetChildren, frame) }
+    -- Rects are in each frame's own scale; record a child frame's where it
+    -- differs from this frame's so its rect can be compared.
+    local scale = round(effectiveScale(frame) * 1000) / 1000
     for _, c in ipairs(children) do
       if not c.fxNode then
         local info = regionInfo(c)
         info.field = names[c]
+        local cs = round(effectiveScale(c) * 1000) / 1000
+        if cs ~= scale then info.scale = cs end
         info.parts = frameParts(c, depth + 1, names)
         parts[#parts + 1] = info
       end

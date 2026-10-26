@@ -3496,7 +3496,7 @@ local function flaggedSnapshot()
   end
   return {
     time = 0, date = "2026-01-02 03:04:05", fxui = "FxUI-1.0.1", theme = "default",
-    uiScale = 1, fxScale = 1, uiSize = { 1000, 800 }, screen = { 2000, 1600 },
+    uiScale = 0.8, fxScale = 1, uiSize = { 1000, 800 }, screen = { 2000, 1600 },
     client = { version = "12.1.5", build = "1", interface = 120105 },
     stats = { active = 3, pooled = 2, created = 5 },
     errors = { { time = 0, message = "boom\nstack line" } },
@@ -3509,7 +3509,7 @@ local function flaggedSnapshot()
     roots = { { parent = "UIParent", tree = {
       id = 1, component = "App", props = { title = "Demo", onClick = "<fn>" }, state = { count = 1 }, renders = 2,
       children = { {
-        id = 2, host = "VStack", props = { padding = 10, gap = 4 }, layout = { 0, 0, 200, 100 }, scale = 1,
+        id = 2, host = "VStack", props = { padding = 10, gap = 4 }, layout = { 0, 0, 200, 100 }, scale = 0.8,
         theme = "classic",
         region = frame({ 0, 600, 200, 100 }, { strata = "MEDIUM", level = 3, clips = true }),
         parts = {
@@ -3548,7 +3548,7 @@ test("reader: header, errors, hover, selection, trees and every flag", function(
   eq(status, 0, "exit status")
   for _, want in ipairs({
     "Snapshot 1/1  2026-01-02 03:04:05  client 12.1.5 (1, interface 120105)  FxUI-1.0.1",
-    "UI 1000x800 at scale 1.00 (FxUI x1.00) on a 2000x1600 screen  theme default  regions active 3 / pooled 2 / created 5",
+    "UI 1000x800 at scale 0.80 (FxUI x1.00) on a 2000x1600 screen  theme default  regions active 3 / pooled 2 / created 5",
     "Errors (1):", "boom\n    stack line",
     "Under the mouse:", "Button HoverMe -> node #5", "Frame <anonymous>",
     "Selected #5 (picked in game)", "screen pixels: ",
@@ -3641,6 +3641,131 @@ test("dev: the reader flags non-finite geometry instead of failing", function()
   } } })
   eq(status, 0, "read without failing:\n" .. text)
   ok(text:find("NONFINITE", 1, true), "flagged:\n" .. text)
+end)
+
+-- Rects are in each region's own scale; a scaled window's rects only compare
+-- with UIParent's (and each other's) once brought to one scale.
+local function scaledSnapshot()
+  local function frame(rect, extra)
+    local r = { type = "Frame", rect = rect, shown = true, visible = true }
+    for k, v in pairs(extra or {}) do r[k] = v end
+    return r
+  end
+  return {
+    time = 0, date = "2026-01-02 03:04:05", uiScale = 0.8, fxScale = 0.5, uiSize = { 1000, 800 }, screen = { 2000, 1600 },
+    client = { version = "12.1.5", build = "1", interface = 120105 },
+    selected = 3,
+    roots = {
+      -- At half the UI's scale: x 600-800, y 200-400 of a 1000x800 UI.
+      { parent = "UIParent", tree = {
+        id = 1, host = "Window", props = {}, layout = { 0, 0, 400, 400 }, scale = 0.4,
+        region = frame({ 1200, 400, 400, 400 }),
+        parts = {
+          -- Sub-frames drawn at their own (double) scale: x 1300-1450 and
+          -- 1500-1650 in the window's units.
+          frame({ 650, 250, 75, 10 }, { field = "badge", scale = 0.8 }),
+          frame({ 750, 250, 75, 10 }, { field = "wide", scale = 0.8 }),
+        },
+        children = {
+          { id = 2, host = "HStack", props = {}, layout = { 1550, 410, 100, 20 }, scale = 0.4,
+            region = frame({ 1550, 410, 100, 20 }) },
+          { id = 3, host = "HStack", props = {}, layout = { 10, 370, 100, 20 }, scale = 0.4,
+            region = frame({ 1210, 410, 100, 20 }) },
+          -- No scale recorded: the parent's.
+          { id = 4, host = "HStack", props = {}, layout = { 20, 360, 100, 20 },
+            region = frame({ 1220, 410, 100, 20 }) },
+        },
+      } },
+      -- At 1.5 times the UI's scale: x 900-1050 sticks 50 UI units (33.3 of
+      -- its own) out of the 1000-unit UI.
+      { parent = "UIParent", tree = {
+        id = 5, host = "Window", props = {}, layout = { 0, 0, 100, 100 }, scale = 1.2,
+        region = frame({ 600, 100, 100, 100 }),
+      } },
+    },
+  }
+end
+
+test("reader: compares rects at one scale in scaled windows", function()
+  local db = { snapshots = { scaledSnapshot() } }
+  local text, status = readDB(db)
+  eq(status, 0, "exit status:\n" .. text)
+  local issues = text:match("Issues %(%d+%):\n(.*)$") or ""
+  ok(not issues:find("#1 Window: OVERFLOW %d"), "a half-scale window inside the UI fits:\n" .. text)
+  ok(issues:find("#5 Window: OVERFLOW 33.3", 1, true), "a 150% window past the UI's edge overflows:\n" .. text)
+  ok(issues:find("#2 Window > HStack: OVERFLOW 50", 1, true), "a child past its window's edge, in its own units:\n" .. text)
+  ok(not issues:find("#3 ", 1, true) and not issues:find("#4 ", 1, true), "children inside the window fit:\n" .. text)
+  ok(text:find("#1 Window   @1200,800 400x400  [scale x0.50]", 1, true), "the window's position in its own units:\n" .. text)
+  ok(text:find("#3 HStack   @10,370 100x20", 1, true), "relative positions at one scale:\n" .. text)
+  ok(text:find("#4 HStack   @20,370 100x20", 1, true), "a node without a scale takes its parent's:\n" .. text)
+  ok(not issues:find("OVERFLOW(badge)", 1, true), "a part at its own scale inside the node fits:\n" .. text)
+  ok(issues:find("#1 Window: OVERFLOW(wide) 50", 1, true), "a part at its own scale past the node's edge:\n" .. text)
+
+  local selected = text:match("Selected #3 %(picked in game%)\n(.-)\n\n")
+  ok(selected and selected:find("#3 HStack", 1, true) and not selected:find("!!", 1, true),
+    "the selection, against the UI, at one scale:\n" .. text)
+
+  text = readDB(db, "--node 1")
+  ok(text:find("#1 Window   @1200,800 400x400", 1, true) and not text:find("OVERFLOW 600", 1, true)
+    and not text:find("#1 Window[^\n]*OVERFLOW %d"), "--node at one scale:\n" .. text)
+end)
+
+-- Sub-regions nest inside sub-frames (a title inside a header frame).
+local function nestedSnapshot()
+  local function fs(field, rect, extra)
+    local r = { type = "FontString", field = field, text = field, rect = rect, shown = true, visible = true }
+    for k, v in pairs(extra or {}) do r[k] = v end
+    return r
+  end
+  local function frame(field, rect, parts, extra)
+    local r = { type = "Frame", field = field, rect = rect, shown = true, visible = true, parts = parts }
+    for k, v in pairs(extra or {}) do r[k] = v end
+    return r
+  end
+  local inside = { 10, 10, 20, 10 }
+  local outside = { 500, 10, 20, 10 }
+  return {
+    time = 0, uiScale = 1, uiSize = { 1000, 800 },
+    roots = { { parent = "UIParent", tree = {
+      id = 1, host = "Window", props = {}, layout = { 0, 0, 200, 100 }, scale = 1,
+      region = { type = "Frame", rect = { 0, 0, 200, 100 }, shown = true, visible = true },
+      parts = {
+        frame("header", { 0, 80, 200, 20 }, {
+          fs("title", inside, { truncated = true }),
+          frame("bar", { 0, 80, 200, 20 }, {
+            fs("deepTitle", inside, { truncated = true }),
+            fs("farTag", outside),
+            fs("nanPart", { 0 / 0, 10, 20, 10 }),
+          }),
+          frame("clipper", { 0, 80, 200, 20 }, { fs("clippedTag", outside) }, { clips = true }),
+        }),
+        frame("hiddenHeader", { 0, 80, 200, 20 }, {
+          fs("hiddenTitle", inside, { truncated = true }),
+          frame("hiddenBar", { 0, 80, 200, 20 }, { fs("hiddenDeep", inside, { truncated = true }), fs("hiddenTag", outside) }),
+        }, { shown = false, visible = false }),
+        frame("panel", { 0, 0, 200, 80 }, {
+          frame("closedBar", { 0, 0, 200, 20 }, { fs("closedTitle", inside, { truncated = true }), fs("closedTag", outside) },
+            { shown = false, visible = false }),
+        }),
+      },
+    } } },
+  }
+end
+
+test("reader: checks sub-regions at every depth, skipping hidden ones", function()
+  local db = { snapshots = { nestedSnapshot() } }
+  local text, status = readDB(db)
+  eq(status, 0, "exit status:\n" .. text)
+  local issues = text:match("Issues %(%d+%):\n(.*)$") or ""
+  for _, want in ipairs({ "TRUNCATED(title)", "TRUNCATED(deepTitle)", "OVERFLOW(farTag) 320", "NONFINITE(nanPart)" }) do
+    ok(issues:find(want, 1, true), "missing " .. want .. ":\n" .. text)
+  end
+  for _, unwanted in ipairs({ "hiddenTitle", "hiddenDeep", "hiddenTag", "closedTitle", "closedTag", "clippedTag", "OVERFLOW(nanPart)" }) do
+    ok(not issues:find(unwanted, 1, true), "flagged under a hidden or clipping ancestor: " .. unwanted .. ":\n" .. text)
+  end
+
+  text = readDB(db, "--parts")
+  ok(text:find("\n            . deepTitle:FontString \"deepTitle\"", 1, true), "--parts lists every depth:\n" .. text)
 end)
 
 test("dev: /fx dev all snapshots the demo and the reader prints it", function()
@@ -3816,6 +3941,30 @@ test("dev: snapshots record props, state, themes, scroll offsets and errors", fu
   local out = readSaved()
   ok(out:find("<SnapProbe>", 1, true) and out:find("probe error", 1, true), "reader prints it:\n" .. out)
   root:unmount()
+end)
+
+test("dev: snapshots record a sub-frame's scale where it differs from its frame's", function()
+  local root = UI.mount(UIParent, UI.VStack { width = 100, height = 50 })
+  W.nextFrame()
+  local region = find(root, "VStack")[1].region
+  local scaled = CreateFrame("Frame", nil, region)
+  scaled:SetScale(0.5)
+  region.scaledBadge = scaled
+  local plain = CreateFrame("Frame", nil, region)
+  region.plainBadge = plain
+  chat(function() fx("dev all -n") end)
+  local snap = FxUIDevDB.snapshots[#FxUIDevDB.snapshots]
+  region.scaledBadge, region.plainBadge = nil, nil
+  root:unmount()
+  local byField = {}
+  for _, r in ipairs(snap.roots) do
+    for _, p in ipairs(r.tree.parts or {}) do
+      if p.field == "scaledBadge" or p.field == "plainBadge" then byField[p.field] = p end
+    end
+  end
+  ok(byField.scaledBadge and byField.plainBadge, "both sub-frames captured")
+  eq(byField.scaledBadge and byField.scaledBadge.scale, math.floor(region:GetEffectiveScale() * 0.5 * 1000 + 0.5) / 1000, "the scaled sub-frame's scale")
+  eq(byField.plainBadge and byField.plainBadge.scale, nil, "no scale where it is the frame's")
 end)
 
 test("dev: /fx dev picker highlights, walks up with the wheel, exports the selection", function()

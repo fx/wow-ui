@@ -77,12 +77,30 @@ local function n2(v)
   return string.format("%.1f", v)
 end
 
--- Client rect as top-left origin box.
-local function box(region)
+-- Client rect as top-left origin box. Rects are in the region's own
+-- (effective) scale, kept with the box so boxes compare at one scale.
+local function box(region, scale)
   local r = region and region.rect
   if not r then return nil end
   local left, bottom, w, h = r[1], r[2], r[3], r[4]
-  return { left = left, top = bottom + h, w = w, h = h, right = left + w, bottom = bottom }
+  return { left = left, top = bottom + h, w = w, h = h, right = left + w, bottom = bottom, scale = scale }
+end
+
+-- The same box in units of another scale (an FxUI-scaled window's, say).
+-- Without both scales (older snapshots) it is taken as is.
+local function rescale(b, scale)
+  if not b or not b.scale or not scale or b.scale == scale then return b end
+  local k = b.scale / scale
+  local out = { left = b.left * k, top = b.top * k, right = b.right * k, bottom = b.bottom * k, w = b.w * k, h = b.h * k, scale = scale }
+  if b.pad then out.pad = { b.pad[1] * k, b.pad[2] * k, b.pad[3] * k, b.pad[4] * k } end
+  return out
+end
+
+local function nonFinite(region)
+  for _, v in ipairs(region and region.rect or {}) do
+    if v ~= v or v == math.huge or v == -math.huge then return true end
+  end
+  return false
 end
 
 local KEY_PROPS = { "text", "title", "label", "value", "variant", "size", "tone", "style", "color", "bg", "count", "selected", "checked", "item", "qty" }
@@ -143,16 +161,19 @@ end
 local issues = {}
 local collecting = true -- off while printing the selection, so issues list once
 
+-- A node's scale: its own, else its parent's (older snapshots record none).
+local function scaleOf(node, parentBox)
+  return node.scale or (parentBox and parentBox.scale)
+end
+
 local function flagsFor(node, parentBox)
   local flags = {}
   local region = node.region
-  local b = box(region)
+  local scale = scaleOf(node, parentBox)
+  local b = box(region, scale)
+  parentBox = rescale(parentBox, scale)
   if region then
-    local nonFinite = false
-    for _, v in ipairs(region.rect or {}) do
-      if v ~= v or v == math.huge or v == -math.huge then nonFinite = true end
-    end
-    if nonFinite then
+    if nonFinite(region) then
       flags[#flags + 1] = "NONFINITE"
       b = nil
     elseif not b and region.visible then
@@ -179,28 +200,30 @@ local function flagsFor(node, parentBox)
       end
     end
   end
-  for _, p in ipairs(node.parts or {}) do
-    if p.truncated and p.shown ~= false then flags[#flags + 1] = "TRUNCATED(" .. (p.field or "?") .. ")" end
-  end
-  -- Labels and tags drawn inside a component that stick out of it.
-  if b and region and region.visible then
-    local function check(list)
-      for _, p in ipairs(list or {}) do
-        local pb = box(p)
+  -- Sub-regions at every depth (a title inside a header frame). A hidden
+  -- part hides everything inside it.
+  local function checkParts(list, partScale, overflow)
+    for _, p in ipairs(list or {}) do
+      if p.shown ~= false then
+        local field = p.field or "?"
+        local ps = p.scale or partScale
+        if p.truncated then flags[#flags + 1] = "TRUNCATED(" .. field .. ")" end
+        local bad = nonFinite(p)
+        if bad then flags[#flags + 1] = "NONFINITE(" .. field .. ")" end
+        -- Labels and tags drawn inside a component that stick out of it.
         -- A scroll area's content frame is larger than the area by design.
-        if pb and p.visible ~= false and p.shown ~= false and p.field ~= "scrollContent"
-          and (p.type == "FontString" or p.type == "Frame" or p.type == "Button") then
+        local pb = not bad and rescale(box(p, ps), scale)
+        local checked = overflow and p.visible ~= false and p.field ~= "scrollContent"
+        if checked and pb and (p.type == "FontString" or p.type == "Frame" or p.type == "Button") then
           local over = math.max(b.left - pb.left, pb.right - b.right, pb.top - b.top, b.bottom - pb.bottom)
-          if over > 0.5 then flags[#flags + 1] = "OVERFLOW(" .. (p.field or "?") .. ") " .. n2(over) end
+          if over > 0.5 then flags[#flags + 1] = "OVERFLOW(" .. field .. ") " .. n2(over) end
         end
+        -- A part that clips its children hides whatever sticks out of it.
+        checkParts(p.parts, ps, checked and not p.clips)
       end
     end
-    check(node.parts)
-    for _, p in ipairs(node.parts or {}) do
-      -- A part that clips its children hides whatever sticks out of it.
-      if p.shown ~= false and p.visible ~= false and not p.clips then check(p.parts) end
-    end
   end
+  checkParts(node.parts, scale, b and region and region.visible)
   return flags
 end
 
@@ -231,17 +254,23 @@ local function walk(node, depth, parentBox, path, full)
     return
   end
 
-  local b = box(node.region)
+  local scale = scaleOf(node, parentBox)
+  local b = box(node.region, scale)
   local geo = ""
   if b then
     local x, y = b.left, b.top
-    if parentBox then x, y = b.left - parentBox.left, parentBox.top - b.top end
+    local pb = rescale(parentBox, scale)
+    if pb then x, y = b.left - pb.left, pb.top - b.top end
     geo = string.format("  @%s,%s %sx%s", n2(x), n2(y), n2(b.w), n2(b.h))
   elseif node.layout then
     geo = string.format("  layout %sx%s", n2(node.layout[3]), n2(node.layout[4]))
   end
   local region = node.region or {}
   local extra = {}
+  -- Where a node's units change (an FxUI-scaled window), relative to UIParent's.
+  if scale and snap.uiScale and snap.uiScale > 0 and parentBox and parentBox.scale and parentBox.scale ~= scale then
+    extra[#extra + 1] = string.format("scale x%.2f", scale / snap.uiScale)
+  end
   if region.visible == false then extra[#extra + 1] = "invisible" end
   if region.alpha then extra[#extra + 1] = "alpha " .. n2(region.alpha) end
   if region.strata and depth == 0 then extra[#extra + 1] = region.strata .. "/" .. tostring(region.level) end
@@ -271,10 +300,13 @@ local function walk(node, depth, parentBox, path, full)
     #extra > 0 and ("  [" .. table.concat(extra, ", ") .. "]") or "", flagText, hoverText))
 
   if full or opts.parts then
-    for _, p in ipairs(node.parts or {}) do
-      emit(indent .. "    . " .. partLine(p))
-      for _, q in ipairs(p.parts or {}) do emit(indent .. "        . " .. partLine(q)) end
+    local function listParts(list, prefix)
+      for _, p in ipairs(list or {}) do
+        emit(prefix .. ". " .. partLine(p))
+        listParts(p.parts, prefix .. "    ")
+      end
     end
+    listParts(node.parts, indent .. "    ")
   end
 
   local childBox = (region.type ~= "FontString" and region.type ~= "Texture") and b or parentBox
@@ -284,7 +316,7 @@ local function walk(node, depth, parentBox, path, full)
   if childBox and childBox == b and PADDED[node.host] then
     local pad = paddingOf(node.props and node.props.padding)
     if pad then
-      childBox = { left = b.left, top = b.top, right = b.right, bottom = b.bottom, w = b.w, h = b.h, pad = pad }
+      childBox = { left = b.left, top = b.top, right = b.right, bottom = b.bottom, w = b.w, h = b.h, scale = b.scale, pad = pad }
     end
   end
   for _, c in ipairs(node.children or {}) do walk(c, depth + 1, childBox, here, full) end
@@ -332,7 +364,7 @@ end
 -- Root positions read from the top-left of UIParent.
 local uiBox
 if snap.uiSize then
-  uiBox = { left = 0, top = snap.uiSize[2], right = snap.uiSize[1], bottom = 0, w = snap.uiSize[1], h = snap.uiSize[2] }
+  uiBox = { left = 0, top = snap.uiSize[2], right = snap.uiSize[1], bottom = 0, w = snap.uiSize[1], h = snap.uiSize[2], scale = snap.uiScale }
 end
 
 local pixelRect

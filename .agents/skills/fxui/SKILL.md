@@ -93,7 +93,7 @@ What the output means:
   - `ZERO`: visible but zero width or height.
 - **Errors** lists what FxUI reported (render errors, handler errors) with stacks. Lua errors from any addon are in `<client>/WTF/Account/<ACCOUNT>/SavedVariables/!BugGrabber.lua` when BugGrabber is installed (written on reload or logout); read that instead of asking the user to paste errors.
 - The header gives the client build, the game's UI scale and FxUI's scale, the UI size in units and the physical screen size.
-- **Units and scale.** Every rect is in its region's own units. Inside an FxUI window those are scaled by the FxUI scale, so compare rects within one window freely, but convert before comparing across windows or with the screen: pixels per unit = effective scale × screenHeight / 768 (each node records its effective scale; `screen pixels:` lines already account for it). At FxUI scale 1, one unit is `screenHeight / uiHeight` pixels.
+- **Units and scale.** Every rect is in its region's own units. Inside an FxUI window those are scaled by the FxUI scale, so compare rects within one window freely, but convert before comparing across windows or with the screen: pixels per unit = effective scale × screenHeight / 768 (each node records its effective scale, and a sub-frame its own where it differs; `screen pixels:` lines already account for it). The reader already does this for its positions and flags: each node's `@x,y` and size are in that node's own units, its parent (or the UI) brought to them, and `[scale xN]` marks where the units change (N relative to the UI). At FxUI scale 1, one unit is `screenHeight / uiHeight` pixels.
 
 Checklist when looking for "the problem":
 
