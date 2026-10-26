@@ -1,0 +1,63 @@
+# Documentation Index
+# Auto-updated by /spec-writer and /project-management skills
+
+specs:
+  - name: architecture
+    path: specs/architecture/
+    description: Repository layout, distribution and versioning, library services (errors, combat, /fx command, scale), media, testing and CI
+    status: active
+  - name: components
+    path: specs/components/
+    description: Text primitives, buttons and protected clicks, badges, toggles, tabs, windows and toasts
+    status: active
+  - name: data-components
+    path: specs/data-components/
+    description: Money, item cells, meters, virtualized lists, sortable tables, charts, sparklines and legends
+    status: active
+  - name: dev-tools
+    path: specs/dev-tools/
+    description: FxUI Dev addon (dev window, demo, snapshots, picker, settings), the snapshot reader and the agent skill
+    status: active
+  - name: layout
+    path: specs/layout/
+    description: Layout props, stacks, flex, wrapping, spacers, text measuring and scroll areas
+    status: active
+  - name: rendering
+    path: specs/rendering/
+    description: Elements, components, the reconciler, region pooling, batched re-renders and mounted roots
+    status: active
+  - name: theme-addons
+    path: specs/theme-addons/
+    description: The Classic and Teal theme addons
+    status: active
+  - name: theme-tokens
+    path: specs/theme-tokens/
+    description: Token contract, default theme values, text contrast and money formatting
+    status: active
+  - name: theming
+    path: specs/theming/
+    description: Theme definitions, inheritance, registration, per-tree and per-element themes, skins, surfaces and the theme setting
+    status: active
+
+changes:
+  - id: "0001"
+    name: fxui-core
+    path: changes/0001-fxui-core.md
+    description: FxUI core library, default theme and media, test harness, repository tooling, docs and CI with the coverage gate
+    spec: architecture
+    status: draft
+    depends_on: []
+  - id: "0002"
+    name: theme-addons
+    path: changes/0002-theme-addons.md
+    description: Classic and Teal theme addons with their tests; CI coverage extended to them
+    spec: theme-addons
+    status: draft
+    depends_on: ["0001"]
+  - id: "0003"
+    name: dev-tools
+    path: changes/0003-dev-tools.md
+    description: FxUI Dev addon, snapshot reader and agent skill with their tests; CI coverage extended to them
+    spec: dev-tools
+    status: draft
+    depends_on: ["0001", "0002"]
