@@ -289,6 +289,35 @@ I.defineHost("Button", {
 })
 
 ---------------------------------------------------------------------------
+-- ToggleGroup
+---------------------------------------------------------------------------
+
+-- One choice of a few, side by side: items = { { id, text, tooltip,
+-- disabled } }, value (the chosen id), onChange(id) when another is
+-- chosen, size (sm default), label (shown before the choices). The chosen
+-- one is drawn as a secondary button, the rest as ghost buttons, on the
+-- theme's inset surface.
+UI.ToggleGroup = I.defineComponent("ToggleGroup", function(props)
+  local row = { gap = 2, padding = 2, surface = "inset", align = "center" }
+  for _, item in ipairs(props.items or {}) do
+    local chosen = item.id == props.value
+    row[#row + 1] = UI.Button {
+      text = item.text or tostring(item.id),
+      size = props.size or "sm",
+      variant = chosen and "secondary" or "ghost",
+      disabled = item.disabled,
+      tooltip = item.tooltip,
+      onClick = function()
+        if not chosen and props.onChange then props.onChange(item.id) end
+      end,
+    }
+  end
+  local group = UI.HStack(row)
+  if not props.label then return group end
+  return UI.HStack { gap = 8, align = "center", UI.Text { text = props.label, style = "label", color = "muted" }, group }
+end)
+
+---------------------------------------------------------------------------
 -- Pressable
 ---------------------------------------------------------------------------
 

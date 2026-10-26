@@ -129,7 +129,8 @@ end
 -- Props: item (itemID or item link), qty, showLevel, note, iconSize,
 -- tooltip(GameTooltip, itemID) to add lines after the item tooltip,
 -- onClick(frame, itemID, link, mouseButton). Shift-click links the item
--- into chat. In a list row with a menu, a right click opens that menu.
+-- into chat. In a list row with a menu, a right click opens that menu;
+-- without an onClick, a left click selects the row.
 I.defineHost("ItemCell", {
   create = function(holder)
     local f = CreateFrame("Button", nil, holder)
@@ -173,7 +174,12 @@ I.defineHost("ItemCell", {
       end
       if mouseButton == "RightButton" and I.rowContextMenu(node) then return end
       local onClick = node.el.props.onClick
-      if onClick then onClick(self, self.fxItemID, link, mouseButton) end
+      if onClick then
+        onClick(self, self.fxItemID, link, mouseButton)
+      elseif mouseButton ~= "RightButton" then
+        -- Without a click of its own, a click selects the row it sits in.
+        I.rowSelect(node)
+      end
     end)
     return f
   end,

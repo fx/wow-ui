@@ -89,3 +89,10 @@ changes:
     spec: components
     status: in-progress
     depends_on: ["0005", "0006"]
+  - id: "0008"
+    name: toggle-group
+    path: changes/0008-toggle-group.md
+    description: UI.ToggleGroup; item cells without their own click select their list row
+    spec: components
+    status: in-progress
+    depends_on: ["0007"]

@@ -170,6 +170,11 @@ local ControlsPage = UI.component("DemoControls", {
             UI.Help { text = "Text alone, without a title." },
           },
         }),
+        Card("Toggle group", {
+          UI.ToggleGroup { label = "PERIOD", value = s.period or "day",
+            items = { { id = "hour", text = "Hour" }, { id = "day", text = "Day" }, { id = "week", text = "Week" }, { id = "month", text = "Month", disabled = true, tooltip = "Not enough history yet." } },
+            onChange = function(id) ctx:setState({ period = id }) end },
+        }),
         Card("Pressable", {
           Row { gap = 8,
             UI.Pressable { tooltip = "Any content can be a click target.", padding = { 2, 6 }, align = "end",

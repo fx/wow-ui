@@ -298,30 +298,45 @@ I.defineHost("List", {
   end,
 })
 
--- A control inside a list row was right-clicked: open that row's menu
--- (onContextMenu) when the list has one. True when it did, so the control
--- leaves the click to the row.
-function I.rowContextMenu(node)
+-- The list row a node sits in: the list's props, the row's item, index
+-- and key; nil outside a list row.
+local function rowOf(node)
   local row = node
   while row and row.parent do
     local list = row.parent
     if list.host == I.hosts.List then
       local p = list.el.props
-      if not p.onContextMenu then return false end
       for j, child in ipairs(list.children or {}) do
         if child == row then
           local i = (list.first or 1) + j - 1
           local item = (p.items or {})[i]
-          if item == nil then return false end
-          p.onContextMenu(item, i, keyOf(p, item, i))
-          return true
+          if item == nil then return nil end
+          return p, item, i, keyOf(p, item, i)
         end
       end
-      return false
+      return nil
     end
     row = list
   end
-  return false
+end
+
+-- A control inside a list row was right-clicked: open that row's menu
+-- (onContextMenu) when the list has one. True when it did, so the control
+-- leaves the click to the row.
+function I.rowContextMenu(node)
+  local p, item, i, key = rowOf(node)
+  if not p or not p.onContextMenu then return false end
+  p.onContextMenu(item, i, key)
+  return true
+end
+
+-- A control inside a list row that has no click of its own was clicked:
+-- select that row (onSelect) when the list selects. True when it did.
+function I.rowSelect(node)
+  local p, item, i, key = rowOf(node)
+  if not p or not p.onSelect then return false end
+  p.onSelect(item, i, key)
+  return true
 end
 
 -- Scroll a mounted list (by its node) to make row i visible.

@@ -86,6 +86,17 @@ This spec owns the behaviour of FxUI's general-purpose components: text primitiv
 - **WHEN** the player hovers the icon
 - **THEN** the tooltip shows that text, above the icon, and hides when the cursor leaves
 
+### Toggle group
+
+- `UI.ToggleGroup` MUST show a few mutually exclusive choices side by side, `items = { { id, text, tooltip, disabled } }`, on the theme's `inset` surface: the chosen one (`value`) as a secondary button, the others as ghost buttons, with an optional `label` before them; `size` defaults to `sm`.
+- Clicking another enabled choice MUST call `onChange(id)`; clicking the chosen one or a disabled one MUST do nothing. The group does not change its own value: the consumer passes the new `value`.
+
+#### Scenario: Chart period
+
+- **GIVEN** a toggle group with Hour, Day, Week and Month, Day chosen
+- **WHEN** the player clicks Week
+- **THEN** `onChange("week")` is called once
+
 ### Pressable
 
 - `UI.Pressable` MUST make any content a click target: it lays out its children as a vertical stack (`gap`, `padding`, `align`, `justify`), or a horizontal one with `horizontal = true`, and calls `onClick(frame)` on a left click.
@@ -228,3 +239,4 @@ The toast stack is an FxUI tree mounted once, on first use, in a `DIALOG`-strata
 | 2026-10-26 | Tooltip and help icon; buttons and sliders use the tooltip | [0005-tooltip-help](../../changes/0005-tooltip-help.md) |
 | 2026-10-26 | Pressable | [0006-pressable](../../changes/0006-pressable.md) |
 | 2026-10-26 | Context menu; row right-clicks in lists and tables | [0007-context-menu](../../changes/0007-context-menu.md) |
+| 2026-10-26 | Toggle group | [0008-toggle-group](../../changes/0008-toggle-group.md) |

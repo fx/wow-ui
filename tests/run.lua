@@ -1263,6 +1263,38 @@ test("pressable: any content as a click target, underlined or washed on hover, w
   root:unmount()
 end)
 
+test("toggle group: one choice of a few; choosing another calls onChange", function()
+  local host = CreateFrame("Frame", nil, UIParent)
+  host:SetSize(400, 60)
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+  local got = {}
+  local function view(value)
+    return UI.ToggleGroup { label = "PERIOD", value = value, onChange = function(id) got[#got + 1] = id end,
+      items = { { id = "day", text = "Day" }, { id = "week", text = "Week", tooltip = "Seven days" }, { id = "month", text = "Month", disabled = true } } }
+  end
+  local root = UI.mount(host, view("day"))
+  UI.flush()
+  local buttons = find(root, "Button")
+  eq(#buttons, 3)
+  eq(buttons[1].el.props.variant, "secondary", "the chosen one")
+  eq(buttons[2].el.props.variant, "ghost")
+  eq(buttons[2].el.props.tooltip, "Seven days")
+  eq(find(root, "Text")[1].el.props.text, "PERIOD", "its label")
+  buttons[1].region:_click()
+  eq(#got, 0, "choosing the chosen one again changes nothing")
+  buttons[2].region:_click()
+  eq(got[1], "week")
+  buttons[3].region:_click()
+  eq(#got, 1, "a disabled choice does nothing")
+  root:update(UI.ToggleGroup { value = "week", items = { { id = "day" }, { id = "week" } } })
+  UI.flush()
+  buttons = find(root, "Button")
+  eq(buttons[2].el.props.variant, "secondary")
+  eq(buttons[1].el.props.text, "day", "the id when no text")
+  eq(#find(root, "Text"), 0, "no label")
+  root:unmount()
+end)
+
 test("context menu: at the cursor, an item runs and closes it, a click outside closes it", function()
   local ran = {}
   W.cursorX, W.cursorY = 300, 400
@@ -1354,6 +1386,16 @@ test("list and table: right-clicking a row asks for its menu", function()
   eq(ran, 0, "the button did not run")
   find(root, "Button")[1].region:_click("LeftButton")
   eq(ran, 1, "a left click still does")
+  root:unmount()
+  -- A left click on an item cell without a click of its own selects its row.
+  local picked
+  root = UI.mount(host, UI.Table {
+    items = items, key = "id", rowHeight = 30, onSelect = function(item, i, key) picked = key end,
+    columns = { { key = "item", flex = 1, render = function() return UI.ItemCell { item = 2772 } end } },
+  })
+  UI.flush()
+  find(root, "ItemCell")[2].region:_click("LeftButton")
+  eq(picked, 20, "the row it sits in")
   root:unmount()
   -- Without a row menu, a right click stays the control's.
   local cellClicks = {}

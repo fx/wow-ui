@@ -25,3 +25,4 @@
 | 0005 | [Tooltip and help](changes/0005-tooltip-help.md) | [Components](specs/components/) | complete | 0001 |
 | 0006 | [Pressable](changes/0006-pressable.md) | [Components](specs/components/) | in-progress | 0005 |
 | 0007 | [Context menu](changes/0007-context-menu.md) | [Components](specs/components/) | in-progress | 0005, 0006 |
+| 0008 | [Toggle group](changes/0008-toggle-group.md) | [Components](specs/components/) | in-progress | 0007 |
