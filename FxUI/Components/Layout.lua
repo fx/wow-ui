@@ -316,6 +316,13 @@ local function withoutFlex(props, horizontal)
   return fixed
 end
 
+-- The measuring limit along one axis: none (nil) where the area scrolls on
+-- that axis, so content keeps its natural size there; size otherwise.
+local function limit(scrolls, size)
+  if scrolls then return nil end
+  return size
+end
+
 -- Lay out kids as a stack (vertical, or horizontal with opts.horizontal) in
 -- a w x h scroll area that scrolls along opts.axis ("y", "x" or "both").
 -- When the content fits, flex children share the free space as usual; when
@@ -332,7 +339,7 @@ function I.scrollLayout(sc, kids, props, w, h, opts)
   -- count at their natural size here: they may stretch to fill, but must
   -- not shrink below what their content needs.
   local fixed = withoutFlex(props)
-  local natW, natH = I.stackMeasure(kids, fixed, horizontal, scrollX and nil or w, scrollY and nil or h)
+  local natW, natH = I.stackMeasure(kids, fixed, horizontal, limit(scrollX, w), limit(scrollY, h))
   local overX = scrollX and natW > w + 0.5
   local overY = scrollY and natH > h + 0.5
   -- A scrollbar takes room from the other axis, which can cause overflow there.
@@ -353,7 +360,7 @@ function I.scrollLayout(sc, kids, props, w, h, opts)
     return false
   end
 
-  natW, natH = I.stackMeasure(kids, fixed, horizontal, overX and nil or viewW, overY and nil or viewH)
+  natW, natH = I.stackMeasure(kids, fixed, horizontal, limit(overX, viewW), limit(overY, viewH))
   local cw = overX and math.max(natW, viewW) or viewW
   local ch = overY and math.max(natH, viewH) or viewH
   sc.contentW, sc.contentH = cw, ch

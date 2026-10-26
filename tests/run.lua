@@ -1825,7 +1825,8 @@ test("layout: stacks are measured as they are placed and keep children inside", 
     local root = UI.mount(host, outer)
     local s = find(root, case.horizontal and "HStack" or "VStack", function(n) return n.el.props.tag == "s" end)[1]
     inside(s, case.label)
-    local mw, mh = I.measure(s, case.horizontal and 200 or nil, case.horizontal and nil or 200)
+    local mw, mh
+    if case.horizontal then mw, mh = I.measure(s, 200, nil) else mw, mh = I.measure(s, nil, 200) end
     local cross = extent(s, not case.horizontal, case.crossEnd)
     eq(case.horizontal and mh or mw, cross, case.label .. ": measured cross size equals the placed extent")
     local main = extent(s, case.horizontal, case.padEnd)
@@ -1861,6 +1862,44 @@ test("layout: a flexible child's minimum applies only along the stack's main axi
   eq(tagged("VStack", "a").w, 80, "column: minWidth still holds across the column")
   local _, mh = I.measure(find(root, "VStack")[1], nil, nil)
   eq(mh, 0, "column: measured main size counts no cross-axis minimum")
+  root:unmount()
+end)
+
+test("scroll: content keeps its natural size along every scrolling axis", function()
+  local host = CreateFrame("Frame")
+  host:SetSize(100, 100)
+  local long = string.rep("word ", 40)
+
+  -- Horizontal: a wrapping text is not squeezed to the view width.
+  local root = UI.mount(host, UI.ScrollView { direction = "horizontal", gap = 0, UI.Text { text = long, wrap = true } })
+  local view = find(root, "ScrollView")[1]
+  local text = find(root, "Text")[1]
+  ok(text.w > 700, "horizontal: the text keeps its natural width, got " .. tostring(text.w))
+  eq(view.region.fxScroller.maxX, text.w - 100, "horizontal: the range covers the whole text")
+  root:unmount()
+
+  -- Content that takes whatever it is offered (up to 500) along each axis.
+  I.defineHost("TestTakeOffered", {
+    update = I.noop,
+    measure = function(_, maxW, maxH)
+      return math.min(maxW, 500), math.min(maxH, 500)
+    end,
+  })
+  local cases = {
+    { direction = "vertical", maxX = 0, maxY = 400 },
+    { direction = "horizontal", maxX = 400, maxY = 0 },
+  }
+  for _, case in ipairs(cases) do
+    root = UI.mount(host, UI.ScrollView { direction = case.direction, gap = 0, UI.TestTakeOffered {} })
+    local sc = find(root, "ScrollView")[1].region.fxScroller
+    eq(sc.maxX, case.maxX, case.direction .. ": horizontal range")
+    eq(sc.maxY, case.maxY, case.direction .. ": vertical range")
+    root:unmount()
+  end
+  root = UI.mount(host, UI.ScrollView { direction = "both", gap = 0, UI.TestTakeOffered {} })
+  local sc = find(root, "ScrollView")[1].region.fxScroller
+  ok(sc.contentW >= 500 and sc.contentH >= 500, "both: content is unbounded on both axes, got "
+    .. tostring(sc.contentW) .. " x " .. tostring(sc.contentH))
   root:unmount()
 end)
 

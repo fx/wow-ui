@@ -89,7 +89,7 @@ A scroll area is a clipping box whose content scrolls when it is larger than the
 
 - `UI.ScrollView` MUST accept `direction` (`vertical`, the default; `horizontal`, which lays children out in a row; or `both`), `gap`, `padding`, `align` (default `stretch` for vertical, `start` otherwise) and surface props.
 - When the content fits, a scroll area MUST lay its children out like a stack of its size (flexible children fill) and show no scrollbar.
-- When the content is larger along a scrolling axis, a scroll area MUST lay its children out at their natural size along that axis (a flexible child does not shrink below what its content needs), set the scroll range to content size minus view size, and show a scrollbar on that axis.
+- When the content is larger along a scrolling axis, a scroll area MUST lay its children out at their natural size along that axis, measured with no limit on it (a flexible child does not shrink below what its content needs, and a wrapping text in a horizontal scroll area keeps its single-line width), set the scroll range to content size minus view size, and show a scrollbar on that axis.
 - A scrollbar MUST take its gutter from the other axis; when that makes the content overflow the other axis too, that axis MUST scroll as well (for `both`).
 - The mouse wheel MUST scroll vertically, or horizontally when Shift is held or when there is nothing to scroll vertically, by 48 px per notch, clamped to the range; scrolling MUST move the content without laying it out again.
 - A scrollbar's thumb MUST be proportional to the visible fraction (at least 24 px), follow the offset, and scroll the content when dragged.
