@@ -1742,6 +1742,102 @@ test("layout: a flexible child is measured at the width it is placed at", functi
   root:unmount()
 end)
 
+test("layout: a stack child is measured within the space the gaps before it leave", function()
+  local host = CreateFrame("Frame")
+  host:SetSize(200, 400)
+  local function chips()
+    local out = {}
+    for i = 1, 4 do out[i] = UI.HStack { width = 50, height = 20 } end
+    return out
+  end
+  local function isWrap(n) return n.el.props.wrap end
+  local function isRow(n) return n.el.props.width == 200 end
+
+  -- 200 px, gap 10, a 100 px child: the wrapping row gets 90 px, so one
+  -- chip per line, and ends inside the row.
+  local root = UI.mount(host, UI.VStack { align = "start",
+    UI.HStack { width = 200, gap = 10, align = "start", UI.HStack { width = 100, height = 20 }, UI.HStack { wrap = true, chips() } },
+  })
+  local wrap, row = find(root, "HStack", isWrap)[1], find(root, "HStack", isRow)[1]
+  eq(wrap.x, 110)
+  ok(wrap.x + wrap.w <= 200, "the row ends inside the stack: " .. tostring(wrap.x + wrap.w))
+  eq(wrap.h, 80, "four lines of one")
+  eq(row.h, 80, "the row is measured as tall as the child it places")
+  root:unmount()
+
+  -- The same along a column: a child that takes the height it is offered
+  -- (up to 150) gets 200 - 100 - 10 = 90.
+  local seen = {}
+  I.defineHost("TestFillHeight", {
+    update = I.noop,
+    measure = function(node, _, maxH)
+      seen[#seen + 1] = maxH
+      return 10, math.min(maxH, 150)
+    end,
+  })
+  root = UI.mount(host, UI.HStack { align = "start",
+    UI.VStack { height = 200, gap = 10, align = "start", UI.HStack { width = 10, height = 100 }, UI.TestFillHeight {} },
+  })
+  local fill = find(root, "TestFillHeight")[1]
+  eq(fill.y, 110)
+  eq(fill.h, 90, "measured within what the gap leaves")
+  ok(fill.y + fill.h <= 200, "the child ends inside the column: " .. tostring(fill.y + fill.h))
+  root:unmount()
+end)
+
+test("layout: stacks are measured as they are placed and keep children inside", function()
+  local host = CreateFrame("Frame")
+  host:SetSize(200, 200)
+  local function chips(n)
+    local out = {}
+    for i = 1, n do out[i] = UI.HStack { width = 50, height = 20 } end
+    return out
+  end
+  local function inside(s, label)
+    for _, c in ipairs(s.children) do
+      ok(c.x >= -0.001 and c.y >= -0.001, label .. ": child starts inside")
+      ok(c.x + c.w <= s.w + 0.001, label .. ": child ends inside horizontally: " .. tostring(c.x + c.w) .. " > " .. tostring(s.w))
+      ok(c.y + c.h <= s.h + 0.001, label .. ": child ends inside vertically: " .. tostring(c.y + c.h) .. " > " .. tostring(s.h))
+    end
+  end
+  -- Extent the children reach, plus the far padding.
+  local function extent(s, horizontal, padEnd)
+    local m = 0
+    for _, c in ipairs(s.children) do
+      local e = horizontal and (c.x + c.w) or (c.y + c.h)
+      if e > m then m = e end
+    end
+    return m + padEnd
+  end
+
+  local cases = {
+    { label = "padded row with a wrapping child", horizontal = true, flex = false, padEnd = 6, crossEnd = 4,
+      el = UI.HStack { tag = "s", padding = { 4, 6 }, gap = 10, align = "start", UI.HStack { width = 60, height = 20 }, UI.HStack { wrap = true, chips(4) }, UI.HStack { width = 8, height = 10 } } },
+    { label = "row with flexible minima", horizontal = true, flex = true, padEnd = 6, crossEnd = 4,
+      el = UI.HStack { tag = "s", padding = { 4, 6 }, gap = 8, align = "start", UI.HStack { flex = 1, minWidth = 100, height = 10 }, UI.HStack { flex = 1, height = 10 }, UI.HStack { width = 50, height = 30 } } },
+    { label = "row with uneven flexible minima", horizontal = true, flex = true, padEnd = 0, crossEnd = 0,
+      el = UI.HStack { tag = "s", gap = 10, align = "start", UI.HStack { flex = 2, minWidth = 30, height = 10 }, UI.HStack { flex = 1, minWidth = 130, height = 10 }, UI.HStack { width = 10, height = 10 } } },
+    { label = "column with flexible minima", horizontal = false, flex = true, padEnd = 5, crossEnd = 5,
+      el = UI.VStack { tag = "s", padding = 5, gap = 10, align = "start", UI.HStack { flex = 1, minHeight = 120, width = 20 }, UI.HStack { flex = 1, width = 30 }, UI.HStack { width = 40, height = 20 } } },
+  }
+  for _, case in ipairs(cases) do
+    local outer = case.horizontal and UI.VStack { case.el } or UI.HStack { align = "stretch", case.el }
+    local root = UI.mount(host, outer)
+    local s = find(root, case.horizontal and "HStack" or "VStack", function(n) return n.el.props.tag == "s" end)[1]
+    inside(s, case.label)
+    local mw, mh = I.measure(s, case.horizontal and 200 or nil, case.horizontal and nil or 200)
+    local cross = extent(s, not case.horizontal, case.crossEnd)
+    eq(case.horizontal and mh or mw, cross, case.label .. ": measured cross size equals the placed extent")
+    local main = extent(s, case.horizontal, case.padEnd)
+    if case.flex then
+      eq(main, 200, case.label .. ": flexible children fill the stack exactly")
+    else
+      eq(case.horizontal and mw or mh, main, case.label .. ": measured main size equals the placed extent")
+    end
+    root:unmount()
+  end
+end)
+
 ---------------------------------------------------------------------------
 
 for _, t in ipairs(tests) do
