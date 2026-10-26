@@ -38,10 +38,13 @@ UI.themes = UI.themes or {}
 
 
 -- Resolved themes: registered names in I.resolved, unregistered definition
--- tables in I.resolvedTables. Loading a newer copy drops the named cache,
--- since its definitions and flattening may differ.
+-- tables in I.resolvedTables. Registering a theme bumps I.themeGen, which
+-- drops the named cache and makes each table resolve again (under its id)
+-- when next used. Loading a newer copy does the same, since its definitions
+-- and flattening may differ.
 I.resolved = I.wipe(I.resolved or {})
 I.resolvedTables = I.resolvedTables or setmetatable({}, { __mode = "k" })
+I.themeGen = (I.themeGen or 0) + 1
 I.nextThemeId = I.nextThemeId or 0
 
 local function safeId(name)
@@ -118,9 +121,14 @@ function I.resolve(ref)
   if type(ref) == "table" then
     if ref.fonts and ref.fontSpecs then return ref end -- already resolved
     local t = I.resolvedTables[ref]
-    if not t then
-      I.nextThemeId = I.nextThemeId + 1
-      t = flatten(ref, "custom" .. I.nextThemeId)
+    if not t or t.gen ~= I.themeGen then
+      local id = t and t.id
+      if not id then
+        I.nextThemeId = I.nextThemeId + 1
+        id = "custom" .. I.nextThemeId
+      end
+      t = flatten(ref, id)
+      t.gen = I.themeGen
       I.resolvedTables[ref] = t
     end
     return t
@@ -152,8 +160,9 @@ function UI.registerTheme(name, base, overrides)
   end
   assert(type(def) == "table" and type(def.name) == "string", "FxUI: a theme needs a name")
   UI.themes[def.name] = def
-  -- Re-resolve this theme and everything inheriting from it.
+  -- Re-resolve this theme and everything inheriting from it, named or not.
   I.wipe(I.resolved)
+  I.themeGen = I.themeGen + 1
   if I.global then
     I.global = I.resolve(UI.themeName or "default")
     UI.theme = I.global

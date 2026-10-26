@@ -714,7 +714,10 @@ end
 function UI.mount(frame, el, opts)
   assert(UI.isElement(el), "FxUI: mount needs an element")
   local root = setmetatable({ frame = frame, el = el, alive = true }, Root)
-  if opts and opts.theme ~= nil then root.theme = I.resolve(opts.theme) end
+  -- Keep the reference, not just the resolved theme, so an update picks up a
+  -- re-registered theme.
+  root.themeRef = opts and opts.theme
+  if root.themeRef ~= nil then root.theme = I.resolve(root.themeRef) end
   root.node = createNode(el, "root", nil, frame, root)
   I.roots[root] = true
   if not frame.fxSizeHooked then
@@ -729,6 +732,7 @@ function Root:update(el)
   if not self.alive then return end
   self.el = el or self.el
   I.tick = I.tick + 1
+  if self.themeRef ~= nil then self.theme = I.resolve(self.themeRef) end
   local node = self.node
   if node and node.el.type == self.el.type and node.el.key == self.el.key then
     updateNode(node, self.el)

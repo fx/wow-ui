@@ -1407,6 +1407,38 @@ test("theme: radius tokens and late item styling use the element's theme", funct
   W.items[4250] = nil
 end)
 
+test("theme: re-registering a theme reaches roots and elements that use it", function()
+  UI.registerTheme("t-re", "default", { colors = { gold = "#FF0000" } })
+  UI.registerTheme("t-re-base", "default", { colors = { gold = "#FF0000" } })
+  UI.registerTheme("t-re-kid", "t-re-base", { colors = { info = "#123456" } })
+  local hosts = {}
+  for i = 1, 3 do
+    hosts[i] = CreateFrame("Frame")
+    hosts[i]:SetSize(100, 100)
+  end
+  local direct = UI.mount(hosts[1], UI.Text { text = "a", color = "gold" }, { theme = "t-re" })
+  local inherited = UI.mount(hosts[2], UI.Text { text = "b", color = "gold" }, { theme = "t-re-kid" })
+  local inline = { name = "inline-kid", base = "t-re-base" }
+  local function elements()
+    return UI.VStack {
+      UI.Text { text = "c", color = "gold", theme = "t-re-kid" },
+      UI.Text { text = "d", color = "gold", theme = inline },
+    }
+  end
+  local perElement = UI.mount(hosts[3], elements())
+  UI.registerTheme("t-re", "default", { colors = { gold = "#00FF00" } })
+  UI.registerTheme("t-re-base", "default", { colors = { gold = "#00FF00" } })
+  direct:update()
+  inherited:update()
+  perElement:update(elements())
+  eq(find(direct, "Text")[1].region._color[2], 1, "a mount theme re-registered")
+  eq(find(inherited, "Text")[1].region._color[2], 1, "a mount theme whose base was re-registered")
+  local texts = find(perElement, "Text")
+  eq(texts[1].region._color[2], 1, "an element theme name whose base was re-registered")
+  eq(texts[2].region._color[2], 1, "an element theme table whose base was re-registered")
+  direct:unmount(); inherited:unmount(); perElement:unmount()
+end)
+
 ---------------------------------------------------------------------------
 
 for _, t in ipairs(tests) do
