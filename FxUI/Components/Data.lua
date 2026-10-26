@@ -459,9 +459,14 @@ local function setTag(t, text, bg, fg, kind)
   t:SetSize(w + 8, 16)
 end
 
-local function hideHover(f)
+-- End a hover: hide the crosshair and, if a point was hovered, tell the
+-- consumer with onHover(nil).
+local function hideHover(f, node)
+  local was = f.hoverIndex
   f.cross:Hide()
   f.hoverIndex, f.hoverY = nil, nil
+  local onHover = was and node and node.el.props.onHover
+  if onHover then I.safecall(onHover, nil) end
 end
 
 -- Draw the crosshair, dot, readout and price tag for the point at index i
@@ -536,10 +541,7 @@ local function hoverUpdate(f)
   local node = f.fxNode
   local g = node and node.geo
   if not g or g.n == 0 or not f:IsVisible() or not f:IsMouseOver() then
-    if f.hoverIndex then
-      hideHover(f)
-      if node and node.el.props.onHover then node.el.props.onHover(nil) end
-    end
+    if f.hoverIndex then hideHover(f, node) end
     return
   end
   local scale = f:GetEffectiveScale()
@@ -548,7 +550,7 @@ local function hoverUpdate(f)
   if not left then return end
   local x, y = cx / scale - left, cy / scale - bottom
   if x < g.left or x > g.right then
-    if f.hoverIndex then hideHover(f) end
+    if f.hoverIndex then hideHover(f, node) end
     return
   end
   local i
@@ -591,6 +593,10 @@ I.defineHost("Chart", {
     f.hoverTag = newTag(f.cross)
     f.cross:Hide()
     f:SetScript("OnUpdate", hoverUpdate)
+    -- A hidden chart gets no OnUpdate, so end the hover here.
+    f:SetScript("OnHide", function(self)
+      if self.hoverIndex then hideHover(self, self.fxNode) end
+    end)
     return f
   end,
   update = I.noop,
@@ -619,7 +625,12 @@ I.defineHost("Chart", {
       xs = {},
     }
     node.geo = g
-    if f.hoverIndex then hideHover(f) end
+    -- New geometry: redraw the hover on the next frame (or end it there, if
+    -- the cursor is no longer over a point) instead of ending it here.
+    if f.hoverIndex then
+      f.cross:Hide()
+      f.hoverY = nil
+    end
 
     local used = { lines = 0, dashes = 0, bodies = 0, wicks = 0, grid = 0 }
     if n == 0 or g.right <= g.left or g.top <= g.bottom then
@@ -777,7 +788,7 @@ I.defineHost("Chart", {
     end
   end,
   release = function(node)
-    hideHover(node.region)
+    hideHover(node.region, node)
     node.geo = nil
   end,
 })

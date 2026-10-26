@@ -97,7 +97,7 @@ This spec owns the behaviour of FxUI's data-oriented components: money, item cel
 - `reference` MUST draw as a dashed horizontal level; `grid` (default on) draws three horizontal gridlines.
 - Unless `axis = false`, a price column on the right MUST show the high and low of the range and a tag at the last value in the series' tone, and MUST be as wide as its widest label (at least 28 px, at most a third of the chart).
 - While the cursor is over the plot, a crosshair MUST snap to the nearest point (line) or the slot under the cursor (bars, candles), show a readout at the top (the point's `labels[i]` and its value formatted by `format(value)`, default short colored money; for candles open, high, low, close and change in percent), and a price tag at the cursor's height. When the readout is wider than the plot it MUST fall back to a shorter form: for candles the label with close and change only, then, for any mode, the value without the label.
-- `onHover(i)` MUST be called with the hovered index, and with `nil` when the cursor leaves.
+- `onHover(i)` MUST be called with the hovered index, and with `nil` whenever the hover ends: the cursor leaves the plot (into the margin or off the chart), the chart is hidden or released, or its data no longer has a point there. A re-layout alone does not end the hover.
 - An empty series MUST draw nothing.
 
 #### Scenario: Line hover

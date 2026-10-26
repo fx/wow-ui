@@ -1439,6 +1439,55 @@ test("theme: re-registering a theme reaches roots and elements that use it", fun
   direct:unmount(); inherited:unmount(); perElement:unmount()
 end)
 
+test("chart: onHover(nil) on every path that ends a hover", function()
+  local host = CreateFrame("Frame")
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+  host:SetSize(300, 150)
+  local values = {}
+  for i = 1, 11 do values[i] = 1000 + i * 100 end
+  local calls = {}
+  local function onHover(i) calls[#calls + 1] = i == nil and "nil" or i end
+  local function chart() return UI.Chart { values = values, onHover = onHover } end
+  local root = UI.mount(host, chart())
+  local node = find(root, "Chart")[1]
+  local f = node.region
+  local l, b = f:GetRect()
+  local function hover(i)
+    W.cursorX, W.cursorY = l + node.geo.xs[i], b + 60
+    W.nextFrame()
+  end
+  hover(6)
+  eq(calls[#calls], 6, "hovered index")
+  W.cursorX = l + 1
+  W.nextFrame()
+  eq(calls[#calls], "nil", "leaving the plot into the margin")
+  ok(not f.cross:IsShown(), "crosshair hidden in the margin")
+  local n = #calls
+  W.cursorX, W.cursorY = -100, -100
+  W.nextFrame()
+  eq(#calls, n, "leaving the frame afterwards sends nothing more")
+
+  hover(4)
+  n = #calls
+  root:update(chart())
+  W.nextFrame()
+  for i = n + 1, #calls do ok(calls[i] ~= "nil", "a re-layout does not end the hover") end
+  eq(calls[#calls], 4, "still hovering after a re-layout")
+  root:update(UI.Chart { values = {}, onHover = onHover })
+  W.nextFrame()
+  eq(calls[#calls], "nil", "the data going away ends the hover")
+
+  root:update(chart())
+  hover(3)
+  f:Hide()
+  eq(calls[#calls], "nil", "hiding the chart ends the hover")
+  f:Show()
+  hover(2)
+  root:unmount()
+  eq(calls[#calls], "nil", "unmounting ends the hover")
+  W.cursorX, W.cursorY = -100, -100
+end)
+
 ---------------------------------------------------------------------------
 
 for _, t in ipairs(tests) do
