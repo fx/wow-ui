@@ -1308,6 +1308,21 @@ test("library: an embedded copy upgrading the standalone addon keeps its saved s
   LibStub, SlashCmdList.FXUI_COMMANDS = realLibStub, realSlash
 end)
 
+test("render: a root update with another key creates a new node", function()
+  local host = CreateFrame("Frame")
+  host:SetSize(100, 100)
+  local root = UI.mount(host, UI.Text { key = "a", text = "a" })
+  local first = root.node
+  root:update(UI.Text { key = "b", text = "b" })
+  ok(root.node ~= first, "another key: a new node")
+  ok(not first.alive, "the old node is released")
+  local second = root.node
+  root:update(UI.Text { key = "b", text = "c" })
+  ok(root.node == second, "the same key updates in place")
+  eq(second.region:GetText(), "c")
+  root:unmount()
+end)
+
 ---------------------------------------------------------------------------
 
 for _, t in ipairs(tests) do

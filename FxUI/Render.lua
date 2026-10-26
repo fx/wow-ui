@@ -722,7 +722,7 @@ function Root:update(el)
   self.el = el or self.el
   I.tick = I.tick + 1
   local node = self.node
-  if node and node.el.type == self.el.type then
+  if node and node.el.type == self.el.type and node.el.key == self.el.key then
     updateNode(node, self.el)
   else
     if node then releaseNode(node) end
