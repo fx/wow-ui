@@ -385,10 +385,17 @@ end
 -- minWidth, minHeight, maxWidth) are resolved through a component chain, a
 -- component's own winning over its rendered child's, and bound the space the
 -- content is measured in, so content is measured at the width it will get.
-function I.measure(node, maxW, maxH)
+-- exact ("w" or "h") makes the offer along that axis the node's size there,
+-- whatever its own props say: a flexible child measured at its share.
+function I.measure(node, maxW, maxH, exact)
   local w, h = layoutProp(node, "width"), layoutProp(node, "height")
   local minW, minH = layoutProp(node, "minWidth"), layoutProp(node, "minHeight")
   local maxWidth = layoutProp(node, "maxWidth")
+  if exact == "w" then
+    w, minW, maxWidth = maxW, nil, nil
+  elseif exact == "h" then
+    h, minH = maxH, nil
+  end
   if w and h then return bound(w, minW, maxWidth), bound(h, minH) end
   local host = node
   while host and host.def do host = host.child end
@@ -439,13 +446,13 @@ end
 
 -- Measure a stack child. A Spacer's fixed size runs along the stack's main
 -- axis only.
-local function measureChild(c, horizontal, maxW, maxH)
+local function measureChild(c, horizontal, maxW, maxH, exact)
   if c.host and c.host.name == "Spacer" then
     local size = c.el.props.size or 0
     if horizontal then return size, 0 end
     return 0, size
   end
-  return I.measure(c, maxW, maxH)
+  return I.measure(c, maxW, maxH, exact)
 end
 
 -- A wrapping row: split children into lines no wider than innerW.
@@ -597,9 +604,9 @@ local function stackSizes(kids, props, horizontal, innerW, innerH)
         local m = mains[i]
         local cw, ch
         if horizontal then
-          cw, ch = measureChild(kids[i], true, unbounded and innerW or m, innerH)
+          cw, ch = measureChild(kids[i], true, unbounded and innerW or m, innerH, not unbounded and "w" or nil)
         else
-          cw, ch = measureChild(kids[i], false, innerW, unbounded and innerH or m)
+          cw, ch = measureChild(kids[i], false, innerW, unbounded and innerH or m, not unbounded and "h" or nil)
         end
         crosses[i] = horizontal and ch or cw
       end
