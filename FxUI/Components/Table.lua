@@ -163,13 +163,18 @@ UI.Table = I.defineComponent("Table", {
       if col.key == sortKey then sortCol = col end
     end
 
-    -- Re-sort only when the items or the sort change.
+    -- Re-sort only when something the order depends on changes: the items
+    -- (table and count), the sort key, the direction, or the sorted column's
+    -- sortValue (a new function may order the same items differently).
     local items = props.items or {}
     local memo = ctx.sorted
+    local by = sortCol and sortCol.sortValue
     if not sortCol then
       ctx.sorted = nil
-    elseif not memo or memo.items ~= items or memo.key ~= sortKey or memo.desc ~= sortDesc or memo.n ~= #items then
-      ctx.sorted = { items = items, key = sortKey, desc = sortDesc, n = #items, list = sortItems(items, sortCol, sortDesc) }
+    elseif not memo or memo.items ~= items or memo.key ~= sortKey or memo.desc ~= sortDesc
+        or memo.n ~= #items or memo.by ~= by then
+      ctx.sorted = { items = items, key = sortKey, desc = sortDesc, n = #items, by = by,
+        list = sortItems(items, sortCol, sortDesc) }
     end
     local rows = ctx.sorted and ctx.sorted.list or items
 

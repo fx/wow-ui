@@ -1676,6 +1676,39 @@ test("theme: every theme gets its own font objects, whatever its name", function
   eq(select(2, I.resolve("t-font-a_b").fonts.body:GetFont()), 24, "the other theme is untouched")
 end)
 
+test("table: changing the sorted column's sortValue sorts again", function()
+  local host = CreateFrame("Frame")
+  host:SetSize(400, 300)
+  local items = { { id = 1, a = 1, b = 3 }, { id = 2, a = 2, b = 2 }, { id = 3, a = 3, b = 1 } }
+  local function tree(field)
+    return UI.Table {
+      key = "id", items = items, defaultSort = { key = "v" },
+      columns = { { key = "v", title = "V", flex = 1, sortValue = function(it) return it[field] end } },
+    }
+  end
+  local root = UI.mount(host, tree("a"))
+  local function order()
+    local out = {}
+    for _, c in ipairs(find(root, "List")[1].children) do out[#out + 1] = c.el.key end
+    return table.concat(out, ",")
+  end
+  eq(order(), "1,2,3", "sorted by the first sortValue")
+  root:update(tree("b"))
+  eq(order(), "3,2,1", "sorted again by the new sortValue")
+
+  -- The same sortValue with the same items does not sort again.
+  local calls = 0
+  local sv = function(it) calls = calls + 1; return it.a end
+  local function cell(it) return UI.Text { text = tostring(it.id) } end
+  local function same() return UI.Table { key = "id", items = items, defaultSort = { key = "v" }, columns = { { key = "v", flex = 1, sortValue = sv, render = cell } } } end
+  root:update(same())
+  local after = calls
+  ok(after > 0, "sorted with the new function")
+  root:update(same())
+  eq(calls, after, "no re-sort when nothing the order depends on changed")
+  root:unmount()
+end)
+
 ---------------------------------------------------------------------------
 
 for _, t in ipairs(tests) do

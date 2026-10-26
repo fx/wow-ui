@@ -73,7 +73,7 @@ This spec owns the behaviour of FxUI's data-oriented components: money, item cel
 - Clicking a sortable header MUST sort by that column ascending; clicking it again MUST reverse the direction; clicking another column MUST sort by it ascending. The sorted column's header MUST show a chevron for its direction.
 - Sorting MUST be stable, place items with no value last in either direction, compare strings case-insensitively, and compare values of mixed types as strings.
 - `defaultSort = { key, desc }` sets the initial sort. With `sort = { key, desc }` the sort is controlled: the table shows that order and header clicks call `onSort(key, desc)` with the requested sort instead of sorting.
-- Sorting MUST NOT run again unless the items, the sort column or the direction change. `UI.sortItems(items, column, desc)` exposes the same sort.
+- Sorting MUST run again when anything the order depends on changes — the items, the sort column, the direction or the sorted column's `sortValue` function — and MUST NOT run again otherwise. `UI.sortItems(items, column, desc)` exposes the same sort.
 
 #### Scenario: Header clicks
 
