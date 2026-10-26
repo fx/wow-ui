@@ -1838,6 +1838,49 @@ test("layout: stacks are measured as they are placed and keep children inside", 
   end
 end)
 
+test("table: mixed-type columns sort the same way from every starting order", function()
+  local values = { 2, 10, "11", "b", "A" }
+  local function permutations(list)
+    local out = {}
+    local function go(prefix, rest)
+      if #rest == 0 then out[#out + 1] = prefix return end
+      for i = 1, #rest do
+        local p, r = { unpack(prefix) }, { unpack(rest) }
+        p[#p + 1] = table.remove(r, i)
+        go(p, r)
+      end
+    end
+    go({}, list)
+    return out
+  end
+  local col = { key = "v" }
+  local function order(items)
+    local s = {}
+    for i, it in ipairs(items) do s[i] = tostring(it.v) end
+    return table.concat(s, ",")
+  end
+  local asc, desc
+  for _, perm in ipairs(permutations(values)) do
+    local items = {}
+    for i, v in ipairs(perm) do items[i] = { v = v } end
+    items[#items + 1] = { v = nil }
+    local a, d = order(UI.sortItems(items, col, false)), order(UI.sortItems(items, col, true))
+    asc, desc = asc or a, desc or d
+    eq(a, asc, "ascending order does not depend on the input order")
+    eq(d, desc, "descending order does not depend on the input order")
+  end
+  -- A mixed column compares every value as a string.
+  eq(asc, "10,11,2,A,b,nil")
+  eq(desc, "b,A,2,11,10,nil")
+  -- A column of one type keeps that type's order.
+  for _, d in ipairs({ false, true }) do
+    local sorted = UI.sortItems({ { v = 10 }, { v = 2 }, { v = 0 / 0 }, { v = 11 } }, col, d)
+    eq(order({ sorted[1], sorted[2], sorted[3] }), d and "11,10,2" or "2,10,11", "a column of numbers sorts numerically")
+    ok(sorted[4].v ~= sorted[4].v, "NaN has no value and goes last")
+  end
+  eq(order(UI.sortItems({ { v = true }, { v = false } }, col, false)), "false,true", "values that have no order compare as strings")
+end)
+
 ---------------------------------------------------------------------------
 
 for _, t in ipairs(tests) do

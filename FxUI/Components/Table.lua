@@ -106,12 +106,30 @@ local function valueOf(col, item)
   if type(item) == "table" then return item[col.key] end
 end
 
--- Stable sort; nil values last in either direction; mixed types compare as
--- strings.
+-- Stable sort; nil (and NaN) values last in either direction. A column
+-- whose values are all numbers or all strings compares them as such
+-- (strings case-insensitively); any other column compares every value as a
+-- string, decided once for the whole column so the order is consistent.
 local function sortItems(items, col, desc)
-  local decorated = {}
+  local decorated, kind = {}, nil
+  local asStrings = false
   for i, item in ipairs(items) do
-    decorated[i] = { item = item, index = i, value = valueOf(col, item) }
+    local v = valueOf(col, item)
+    if v ~= v then v = nil end
+    decorated[i] = { item = item, index = i, value = v }
+    if v ~= nil then
+      local t = type(v)
+      if (t ~= "number" and t ~= "string") or (kind and kind ~= t) then asStrings = true end
+      kind = t
+    end
+  end
+  for _, d in ipairs(decorated) do
+    local v = d.value
+    if v ~= nil then
+      if asStrings then v = tostring(v) end
+      if type(v) == "string" then v = v:lower() end
+      d.value = v
+    end
   end
   table.sort(decorated, function(a, b)
     local va, vb = a.value, b.value
@@ -119,8 +137,6 @@ local function sortItems(items, col, desc)
       if va == nil and vb == nil then return a.index < b.index end
       return vb == nil
     end
-    if type(va) ~= type(vb) then va, vb = tostring(va), tostring(vb) end
-    if type(va) == "string" then va, vb = va:lower(), vb:lower() end
     if va == vb then return a.index < b.index end
     if desc then return va > vb end
     return va < vb

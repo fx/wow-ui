@@ -71,7 +71,7 @@ This spec owns the behaviour of FxUI's data-oriented components: money, item cel
 - A column without `render` MUST show its value (`sortValue(item)`, else `item[key]`) as text.
 - The header MUST line up with the rows' columns.
 - Clicking a sortable header MUST sort by that column ascending; clicking it again MUST reverse the direction; clicking another column MUST sort by it ascending. The sorted column's header MUST show a chevron for its direction.
-- Sorting MUST be stable, place items with no value last in either direction, compare strings case-insensitively, and compare values of mixed types as strings.
+- Sorting MUST be stable, place items with no value (`nil` or NaN) last in either direction, and compare strings case-insensitively. A column whose values are all numbers or all strings MUST compare them as numbers or as strings; any other column — mixed types, or values of a type with no order — MUST compare every value in it as a string, so the order does not depend on the order the items came in.
 - `defaultSort = { key, desc }` sets the initial sort. With `sort = { key, desc }` the sort is controlled: the table shows that order and header clicks call `onSort(key, desc)` with the requested sort instead of sorting.
 - Sorting MUST run again when anything the order depends on changes — the items, the sort column, the direction or the sorted column's `sortValue` function — and MUST NOT run again otherwise. `UI.sortItems(items, column, desc)` exposes the same sort.
 
