@@ -18,6 +18,9 @@ local function ok(v, msg)
 end
 
 W.loadAddon("FxUI", "FxUI")
+-- The theme addons load after FxUI, as the client loads them.
+W.loadAddon("FxUI_Theme_Teal", "FxUI_Theme_Teal")
+W.loadAddon("FxUI_Theme_Classic", "FxUI_Theme_Classic")
 local UI = LibStub("FxUI-1.0")
 local I = UI._internal
 
@@ -1966,7 +1969,11 @@ test("layout: width props bound content before it is measured", function()
   root:unmount()
 end)
 
-test("layout: invariants hold over representative trees at several sizes", function()
+-- Layout invariants over representative trees at several sizes, under the
+-- given theme (nil: the global one). Themes change metrics, fonts and window
+-- chrome, so each shipped theme runs them.
+local function layoutInvariants(theme)
+  local opts = theme and { theme = theme } or nil
   local EPS = 0.001
   local long = string.rep("word ", 12)
   local function chips(n, w, h)
@@ -2075,9 +2082,9 @@ test("layout: invariants hold over representative trees at several sizes", funct
   end
 
   local function mount(case, size, frame)
-    if case.window then return UI.mount(frame, case.el(size[1], size[2])) end
+    if case.window then return UI.mount(frame, case.el(size[1], size[2]), opts) end
     frame:SetSize(size[1], size[2])
-    return UI.mount(frame, case.el())
+    return UI.mount(frame, case.el(), opts)
   end
   local function resize(case, root, frame, size)
     if case.window then
@@ -2187,10 +2194,12 @@ test("layout: invariants hold over representative trees at several sizes", funct
         if not case.window then
           local mw, mh = origMeasure(root.node, size[1], size[2])
           fits = mw <= size[1] + EPS and mh <= size[2] + EPS
-        elseif root.node.el.props.scroll == false then
+        else
+          -- A window body scrolls vertically at most, so its content must fit
+          -- across (and, without scrolling, down too).
           local p, sc = root.node.el.props, root.node.region.body.fxScroller
           local mw, mh = I.stackMeasure(root.node.children, { gap = p.gap, padding = p.padding }, false, sc.contentW, nil)
-          fits = mw <= sc.contentW + EPS and mh <= sc.contentH + EPS
+          fits = mw <= sc.contentW + EPS and (p.scroll ~= false or mh <= sc.contentH + EPS)
         end
         root:layout()
         same(case, size, "second layout", snapshot(root), before)
@@ -2228,6 +2237,10 @@ test("layout: invariants hold over representative trees at several sizes", funct
   I.measure = origMeasure
   if not passed then error(err, 0) end
   if #violations > 0 then error(#violations .. " violations:\n  " .. table.concat(violations, "\n  "), 0) end
+end
+
+test("layout: invariants hold over representative trees at several sizes", function()
+  layoutInvariants(nil)
 end)
 
 test("table: mixed-type columns sort the same way from every starting order", function()
@@ -2271,6 +2284,552 @@ test("table: mixed-type columns sort the same way from every starting order", fu
     ok(sorted[4].v ~= sorted[4].v, "NaN has no value and goes last")
   end
   eq(order(UI.sortItems({ { v = true }, { v = false } }, col, false)), "false,true", "values that have no order compare as strings")
+end)
+
+---------------------------------------------------------------------------
+-- Theme addons: Teal and Classic
+---------------------------------------------------------------------------
+
+-- The color a texture was filled with: vertex color over a shape, or a
+-- color texture.
+local function fillOf(tex)
+  local c = tex._vertex or tex._color
+  return c[1], c[2], c[3]
+end
+
+local function near(a, b, msg)
+  ok(math.abs(a - b) < 0.002, (msg or "values differ") .. ": expected " .. tostring(b) .. ", got " .. tostring(a))
+end
+
+test("teal: registers the default theme with a teal accent and nothing else", function()
+  local def = UI.themes.teal
+  ok(def, "teal registered")
+  eq(def.title, "FxUI Teal")
+  eq(def.base, "default")
+  local keys = {}
+  for k in pairs(def) do keys[#keys + 1] = k end
+  table.sort(keys)
+  eq(table.concat(keys, ","), "base,colors,name,title", "overrides colors only")
+  local colors = {}
+  for k in pairs(def.colors) do colors[#colors + 1] = k end
+  table.sort(colors)
+  eq(table.concat(colors, ","), "gold,onGold", "overrides gold and onGold only")
+
+  local teal, base = I.resolve("teal"), I.resolve("default")
+  eq(teal.title, "FxUI Teal")
+  eq(teal.gold.hex, "#3FC1B0")
+  eq(teal.onGold.hex, "#06201C")
+  local checked = 0
+  for k, v in pairs(base) do
+    if type(v) == "table" and v.hex and k ~= "gold" and k ~= "onGold" then
+      eq(teal[k].hex, v.hex, "color " .. k .. " is the default theme's")
+      checked = checked + 1
+    end
+  end
+  ok(checked > 10, "compared every other color")
+  for token, spec in pairs(base.fontSpecs) do
+    eq(teal.fontSpecs[token].path, spec.path, "font " .. token)
+    eq(teal.fontSpecs[token].size, spec.size, "font size " .. token)
+  end
+  ok(teal.fonts.body ~= base.fonts.body, "its own font objects")
+  eq(teal.money, base.money)
+  for component, m in pairs(base.metrics) do
+    for k, v in pairs(m) do
+      if type(v) ~= "table" then eq(teal.metrics[component][k], v, "metric " .. component .. "." .. k) end
+    end
+  end
+  eq(next(teal.skins), nil, "no skins")
+
+  -- Teal as the global theme: a primary button is filled with the accent.
+  UI.setTheme("teal")
+  local host = CreateFrame("Frame")
+  host:SetSize(200, 50)
+  local root = UI.mount(host, UI.Button { text = "Go", variant = "primary" })
+  local b = find(root, "Button")[1].region
+  local r, g, bl = fillOf(b.fxBg)
+  near(r, teal.gold.r, "red"); near(g, teal.gold.g, "green"); near(bl, teal.gold.b, "blue")
+  eq(b.label._color[1], teal.onGold.r, "label in onGold")
+  root:unmount()
+  UI.setTheme("default")
+end)
+
+test("classic: client fonts with shadows, coin icons and the client's colors", function()
+  local def = UI.themes.classic
+  ok(def, "classic registered")
+  eq(def.title, "Classic")
+  eq(def.base, "default")
+  local c = I.resolve("classic")
+  local FRIZ, MORPHEUS, ARIAL = "Fonts\\FRIZQT__.TTF", "Fonts\\MORPHEUS.TTF", "Fonts\\ARIALN.TTF"
+  local want = { display = MORPHEUS, title = FRIZ, body = FRIZ, strong = FRIZ, label = FRIZ, small = FRIZ, mono = ARIAL, monoSmall = ARIAL }
+  for token, path in pairs(want) do
+    eq(c.fontSpecs[token].path, path, "font " .. token)
+    ok(c.fontSpecs[token].shadow, "font " .. token .. " has a shadow")
+    eq((c.fonts[token]:GetFont()), path, "font object " .. token)
+    ok(c.fonts[token] ~= I.resolve("default").fonts[token], "own font object " .. token)
+  end
+  eq(c.money, "icons")
+  local colors = {
+    ground = "#000000", panel = "#0B0B0B", raised = "#1E1E1E", line = "#5A4A2A", text = "#FFFFFF",
+    muted = "#FFD100", gold = "#FFD100", onGold = "#000000", info = "#69CCF0", up = "#1EFF00",
+    down = "#FF3030", warn = "#FF8000", poor = "#9D9D9D", common = "#FFFFFF", uncommon = "#1EFF00",
+    rare = "#0070DD", epic = "#A335EE", legendary = "#FF8000",
+  }
+  for token, hex in pairs(colors) do eq(c[token].hex, hex, "color " .. token) end
+  -- The client's Rare and Epic stay below the default theme's 4.5:1 on purpose.
+  local rare, epic = UI.contrast(c.rare, c.panel), UI.contrast(c.epic, c.panel)
+  ok(rare > 4 and rare < 4.5, "rare about 4.1:1, got " .. rare)
+  ok(epic > 3.9 and epic < 4.5, "epic about 4.0:1, got " .. epic)
+
+  -- Metrics from the spec.
+  local m = c.metrics
+  eq(m.Button.sizes.sm.height, 20); eq(m.Button.sizes.md.height, 22); eq(m.Button.sizes.lg.pad, 18)
+  eq(m.Toggle.width, 24); eq(m.Toggle.gap, 4)
+  eq(m.Tab.height, 30); eq(m.Tab.gap, -10); eq(m.Tab.rail, 5); eq(m.Tab.railColor, "#666666")
+  ok(m.Tab.openSelected and m.Tab.railAbove and not m.Tab.railHighlight, "tab rail flags")
+  eq(m.Badge.height, 18); eq(m.Meter.barHeight, 16); ok(m.Meter.inlineValue)
+  eq(m.HeaderCell.height, 19); eq(m.Scroll.width, 18); eq(m.Scroll.thumb, 16)
+  eq(m.Window.status, "footer"); eq(m.Window.actions, "footer")
+  eq(m.Window.md.header, 34); eq(m.Window.sm.header, 30); ok(m.Window.md.banner and m.Window.sm.banner)
+
+  -- Coin icons inside a Classic tree only, then everywhere once Classic is global.
+  local host = CreateFrame("Frame")
+  host:SetSize(200, 50)
+  local root = UI.mount(host, UI.Money { value = 123456 }, { theme = "classic" })
+  ok(find(root, "Money")[1].region:GetText():find("UI-GoldIcon", 1, true), "coin icons inside the tree")
+  root:unmount()
+  eq(UI.formatMoney(123456), "12g 34s 56c", "letters outside it")
+  UI.setTheme("classic")
+  ok(UI.formatMoney(123456):find("UI-GoldIcon", 1, true), "coin icons with Classic global")
+  UI.setTheme("default")
+end)
+
+test("classic: skins draw with client art and clean up when switching back", function()
+  local host = CreateFrame("Frame")
+  host:SetSize(300, 100)
+  local root = UI.mount(host, UI.HStack { UI.Button { text = "Go" }, UI.Toggle { label = "On", checked = true } }, { theme = "classic" })
+  local b = find(root, "Button")[1].region
+  ok(b.fxSkinTex and b.fxSkinTex.bgL:IsShown(), "panel button slices")
+  eq(b.fxSkinTex.bgM._texture, "Interface\\Buttons\\UI-Panel-Button-Up")
+  ok(not (b.fxBg and b.fxBg:IsShown()), "no flat background")
+  local t = find(root, "Toggle")[1].region
+  ok(t.fxSkinTex.check:IsShown() and not t.track:IsShown(), "checkbox instead of the pill")
+  root:update(UI.HStack { UI.Button { text = "Go" }, UI.Toggle { label = "On", checked = true } })
+  root:unmount()
+  root = UI.mount(host, UI.HStack { UI.Button { text = "Go" }, UI.Toggle { label = "On", checked = true } })
+  b = find(root, "Button")[1].region
+  ok(not b.fxSkinTex.bgL:IsShown(), "pooled button: classic slices hidden under the default theme")
+  ok(b.fxBg and b.fxBg:IsShown(), "default background back")
+  t = find(root, "Toggle")[1].region
+  ok(t.track:IsShown() and not t.fxSkinTex.check:IsShown(), "pill back")
+  root:unmount()
+
+  -- Tabs, title banner, rows and header cells, then back to the default.
+  local items = { { id = 1, v = "a" }, { id = 2, v = "b" } }
+  local function view(theme)
+    return UI.Window { title = "Classic", width = 400, height = 300, theme = theme,
+      UI.TabBar { tabs = { { id = "x", text = "One" }, { id = "y", text = "Two" } }, selected = "x" },
+      UI.Table { flex = 1, items = items, key = "id", selected = 2, onSelect = function() end,
+        columns = { { key = "v", title = "Value", flex = 1 } } },
+    }
+  end
+  root = UI.mount(UIParent, view("classic"))
+  local tabs = find(root, "Tab")
+  local sel = tabs[1].region
+  eq(sel.fxSkinTex.onM._texture, "Interface\\OptionsFrame\\UI-OptionsFrame-ActiveTab", "selected tab uses the top tab art")
+  local other = tabs[2].region.fxSkinTex
+  eq(other.onM._texture, "Interface\\OptionsFrame\\UI-OptionsFrame-ActiveTab", "other tabs the same full-height art")
+  ok(other.onM._vertex[1] < 1, "darkened")
+  eq(other.onL._points[1][5], -6.25, "inactive tabs hang like the selected one")
+  eq(sel.fxSkinTex.onL._points[1][5], -6.25, "so their feet land on the rail")
+  local railNode = find(root, "TabRail")[1]
+  ok(railNode.region:GetFrameLevel() > tabs[2].region:GetFrameLevel(), "the rail crosses over the tabs")
+  local win = find(root, "Window")[1].region
+  ok(win.header.fxSkinTex.bannerM:IsShown(), "title banner")
+  local header = find(root, "HeaderCell")[1].region
+  eq(header.fxSkinTex.colM._texture, "Interface\\FriendsFrame\\WhoFrame-ColumnTabs", "column header art")
+  -- The rail under the tabs opens under the selected tab, measured from the
+  -- selected tab's art on screen.
+  local rail = find(root, "TabRail")[1]
+  local railLeft = rail.region:GetLeft()
+  local artL, artR = sel.fxSkinTex.onL:GetLeft(), sel.fxSkinTex.onR:GetRight()
+  ok(math.abs(rail.region.left._w - (artL + 9.5 - railLeft)) < 0.01, "rail runs in under the tab's left flare: " .. rail.region.left._w)
+  ok(math.abs(rail.region.right._points[1][4] - (artR - 9.5 - railLeft)) < 0.01, "and resumes under the right flare")
+  ok(rail.region.left.fxInner and rail.region.left.fxInner._backdrop, "rail drawn with border art")
+  eq(sel.label._points[1][5], -3.75, "selected tab text")
+  eq(tabs[2].region.label._points[1][5], -3.75, "same text offset in every tab")
+  -- With nothing in the header, the classic header is a thin strip.
+  eq(win.header._h, 14, "compact header under the banner")
+  local list = find(root, "List")[1]
+  ok(list.children[2].region.fxSkinTex.rowHL:IsShown(), "selected row highlighted")
+  ok(not list.children[1].region.fxSkinTex.rowHL:IsShown(), "other row plain")
+  root:update(view(nil))
+  sel = find(root, "Tab")[1].region
+  ok(not sel.fxSkinTex.onM:IsShown(), "classic tab art hidden under the default theme")
+  ok(not sel.underline:IsShown(), "default tabs carry no underline of their own")
+  rail = find(root, "TabRail")[1]
+  ok(not rail.region.right:IsShown() or rail.region.left._w >= rail.w - 0.5, "default rail is continuous")
+  ok(rail.region.mark:IsShown(), "the selected tab is marked on the line")
+  local selNode = find(root, "Tab")[1]
+  ok(math.abs(rail.region.mark._points[1][4] - (selNode.region:GetLeft() - rail.region:GetLeft())) < 0.01, "mark under the selected tab")
+  eq(rail.region.mark._w, selNode.w, "mark as wide as the tab")
+  ok(not win.header.fxSkinTex.bannerM:IsShown(), "banner hidden")
+  ok(not find(root, "List")[1].children[2].region.fxSkinTex.rowHL:IsShown(), "row highlight hidden")
+  root:unmount()
+end)
+
+test("classic: window status and actions move to a footer status bar", function()
+  local clicked
+  local function view(theme)
+    return UI.Window { title = "Acts", width = 400, height = 300, theme = theme,
+      actions = { { text = "Do", onClick = function() clicked = true end } },
+      status = "status",
+      UI.Text { text = "body" },
+    }
+  end
+  local function textsIn(list)
+    local out = {}
+    for _, n in ipairs(list or {}) do if n.el.props.text then out[#out + 1] = n.el.props.text end end
+    return table.concat(out, ",")
+  end
+  local root = UI.mount(UIParent, view(nil))
+  eq(textsIn(find(root, "Window")[1].headerChildren), "status,Do", "default theme: in the header")
+  root:update(view("classic"))
+  local win = find(root, "Window")[1]
+  eq(textsIn(win.headerChildren), "", "classic: header keeps only the title and close")
+  eq(textsIn(win.footerChildren), "status,Do", "classic: actions in the footer after the status")
+  ok(win.region.footer:IsShown(), "footer shown")
+  ok(win.region.footer.fxHasBackdrop, "classic footer drawn as a status bar")
+  eq(win.region.footer._backdrop.edgeFile, "Interface\\Tooltips\\UI-Tooltip-Border", "framed like a tooltip")
+  local _, _, fw = win.region.footer:GetRect()
+  local _, _, ww = win.region:GetRect()
+  eq(fw, ww - 2 * 10, "footer spans the full width inside the border")
+  local action = find(root, "Button", function(n) return n.el.props.text == "Do" end)[1]
+  eq(action.el.props.variant, "secondary", "actions as secondary buttons")
+  ok(action.region.fxSkinTex.bgM:IsShown(), "drawn as panel buttons")
+  action.region:_click()
+  ok(clicked, "action runs")
+  ok(win.region.close.fxSkinTex.up:IsShown(), "red close button")
+  eq(win.region.close.fxSkinTex.up._texture, "Interface\\Buttons\\UI-Panel-MinimizeButton-Up")
+  root:unmount()
+end)
+
+test("classic: every component draws with client art in every state; pooled regions are clean afterwards", function()
+  W.items[17] = true
+  local items = {}
+  for i = 1, 30 do items[i] = { id = i, v = "r" .. i } end
+  local function view(theme, size)
+    return UI.Window { title = "Classic", width = 560, height = 760, size = size, theme = theme, status = "s",
+      UI.HStack { gap = 4,
+        UI.Button { text = "Go" },
+        UI.Button { text = "Ghost", variant = "ghost" },
+        UI.Button { text = "Off", disabled = true },
+        UI.Badge { text = "B", tone = "info" },
+        UI.Badge { text = "S", tone = "gold", solid = true },
+        UI.Toggle { label = "On", checked = true },
+        UI.Toggle { label = "Off", checked = true, disabled = true },
+      },
+      UI.TabBar { tabs = { { id = "x", text = "One", count = 3 }, { id = "y", text = "Two" } }, selected = "x" },
+      UI.ItemCell { item = 17 },
+      UI.Meter { value = 5, max = 10, label = "Fill", valueText = "5/10", tone = "info" },
+      UI.VStack { surface = "card", UI.Text { text = "card" } },
+      UI.VStack { surface = "inset", UI.Text { text = "inset" } },
+      UI.Chart { width = 200, height = 100, values = { 1, 2, 3 } },
+      UI.Table { height = 120, items = items, key = "id", selected = 2, onSelect = function() end,
+        columns = { { key = "v", title = "Value", flex = 1 } } },
+      UI.ScrollView { direction = "both", width = 100, height = 60, UI.HStack { width = 300, height = 200 } },
+    }
+  end
+  local root = UI.mount(UIParent, view("classic"))
+  local C = I.resolve("classic")
+
+  -- Buttons: panel art, gold text, white on hover, pressed art and offset,
+  -- disabled art and gray text; ghost buttons are text only.
+  local buttons = find(root, "Button", function(n) return n.parent and n.parent.host and n.parent.host.name == "HStack" end)
+  local go, ghost, off = buttons[1].region, buttons[2].region, buttons[3].region
+  eq(go.label._color[2], 0xD1 / 255, "gold text")
+  go:_fire("OnEnter")
+  eq(go.label._color[2], 1, "white on hover")
+  ok(go.fxSkinTex.hl:IsShown(), "highlight art")
+  go:_fire("OnMouseDown")
+  eq(go.fxSkinTex.bgM._texture, "Interface\\Buttons\\UI-Panel-Button-Down", "pressed art")
+  eq(go.label._points[1][4], 1, "text moves 1 px right when pressed")
+  eq(go.label._points[1][5], -1, "and 1 px down")
+  go:_fire("OnMouseUp")
+  go:_fire("OnLeave")
+  eq(go.fxSkinTex.bgM._texture, "Interface\\Buttons\\UI-Panel-Button-Up", "up art again")
+  eq(off.fxSkinTex.bgM._texture, "Interface\\Buttons\\UI-Panel-Button-Disabled", "disabled art")
+  eq(off.label._color[1], 0x80 / 255, "gray text when disabled")
+  ok(not (ghost.fxSkinTex and ghost.fxSkinTex.bgM and ghost.fxSkinTex.bgM:IsShown()), "ghost: no panel art")
+  ghost:_fire("OnEnter")
+  eq(ghost.label._color[3], 1, "ghost text white on hover")
+  ghost:_fire("OnLeave")
+  eq(ghost.label._color[3], 0, "ghost text gold")
+
+  -- Badges: thin tooltip frames in the tone.
+  local badges = find(root, "Badge")
+  local tinted, solid = badges[1].region, badges[2].region
+  eq(tinted._backdrop.edgeFile, "Interface\\Tooltips\\UI-Tooltip-Border", "thin tooltip frame")
+  near(tinted.label._color[1], C.info.r, "tone text")
+  near(tinted._backdropBorder[3], C.info.b * 0.8, "border in the tone")
+  eq(solid.label._color[1], 1, "solid badge: white text")
+  near(solid._backdropBorder[1], C.gold.r, "solid badge: border in the tone")
+
+  -- Toggles: the checkbox.
+  local toggles = find(root, "Toggle")
+  local on, disabled = toggles[1].region, toggles[2].region
+  eq(on.fxSkinTex.box._texture, "Interface\\Buttons\\UI-CheckBox-Up", "checkbox")
+  eq(on.fxSkinTex.check._texture, "Interface\\Buttons\\UI-CheckBox-Check", "check")
+  eq(disabled.fxSkinTex.check._texture, "Interface\\Buttons\\UI-CheckBox-Check-Disabled", "disabled check")
+  ok(not disabled.fxSkinTex.hl:IsShown(), "no highlight when disabled")
+  eq(disabled.label._color[1], 0x80 / 255, "gray label when disabled")
+
+  -- Tabs: the count is centred with the label; hover lightens an inactive tab.
+  local tabs = find(root, "Tab")
+  local first, second = tabs[1].region, tabs[2].region
+  ok(first.count:IsShown(), "count shown")
+  ok(first.label._points[1][4] < 0, "label shifted left to centre it with the count")
+  eq(second.label._points[1][4], 0, "a tab without a count is centred")
+  near(second.fxSkinTex.onM._vertex[1], 0.65, "inactive tab darkened")
+  ok(second.fxSkinTex.hl:IsShown() and not first.fxSkinTex.hl:IsShown(), "highlight on inactive tabs only")
+  second:_fire("OnEnter")
+  near(second.fxSkinTex.onM._vertex[1], 0.85, "lighter on hover")
+  eq(second.label._color[3], 1, "white text on hover")
+  second:_fire("OnLeave")
+  eq(second.label._color[3], 0, "gold text otherwise")
+
+  -- Item cell: a square icon in the quality-tinted frame.
+  local cell = find(root, "ItemCell")[1].region
+  eq(cell.fxSkinTex.iconFrame._texture, "Interface\\Common\\WhiteIconFrame", "icon frame")
+  ok(cell.fxSkinTex.iconFrame:IsShown(), "shown")
+  eq(cell.icon._w, cell.icon._h, "square icon")
+
+  -- Meter: a status bar in a thin tooltip frame.
+  local meter = find(root, "Meter")[1].region
+  eq(meter.fill._texture, "Interface\\TargetingFrame\\UI-StatusBar", "status bar fill")
+  near(meter.fill._vertex[1], C.info.r, "in the tone")
+  eq(meter.track._backdrop.edgeFile, "Interface\\Tooltips\\UI-Tooltip-Border", "thin frame")
+
+  -- Cards and insets: tooltip-style backdrops.
+  local card = find(root, "VStack", function(n) return n.el.props.surface == "card" end)[1].region
+  eq(card._backdrop.bgFile, "Interface\\Tooltips\\UI-Tooltip-Background", "card backdrop")
+  local inset = find(root, "VStack", function(n) return n.el.props.surface == "inset" end)[1].region
+  eq(inset._backdrop.edgeSize, 10, "inset: thin frame")
+
+  -- Chart tags: tooltip frames; the last-price tag in its tone on black.
+  local chart = find(root, "Chart")[1].region
+  ok(chart.lastTag._backdrop, "last-price tag framed")
+  near(chart.lastTag.text._color[1], chart.lastTag._backdropBorder[1] / 0.8, "last tag lettered in its tone")
+  local l, b, w, h = chart:GetRect()
+  W.cursorX, W.cursorY = l + w / 2, b + h / 2
+  W.nextFrame()
+  ok(chart.readout:IsShown() and chart.readout._backdrop, "readout in a tooltip frame")
+  near(chart.readout._backdropBorder[1], 0x90 / 255, "gray border")
+  W.cursorX, W.cursorY = -100, -100
+  W.nextFrame()
+
+  -- Table: column-tab header art, gold title once sorted; rows highlighted
+  -- on hover, gold when selected or pressed.
+  local headerNode = find(root, "HeaderCell")[1]
+  local header = headerNode.region
+  eq(header.fxSkinTex.colM._texture, "Interface\\FriendsFrame\\WhoFrame-ColumnTabs", "column tab art")
+  ok(header.fxSkinTex.hl, "sortable header highlight")
+  eq(header.label._color[3], 1, "white title when not sorted")
+  local list = find(root, "List")[1]
+  local row2 = list.children[2].region.fxSkinTex.rowHL
+  eq(row2._texture, "Interface\\QuestFrame\\UI-QuestTitleHighlight", "quest-log highlight")
+  near(row2._vertex[4], 0.7, "selected row in gold")
+  local ll, lb, lw, lh = list.region:GetRect()
+  W.cursorX, W.cursorY = ll + 20, lb + lh - 10 -- first row
+  W.nextFrame()
+  eq(list.hover, 1, "first row hovered")
+  local hovered = list.children[1].region.fxSkinTex.rowHL
+  ok(hovered:IsShown(), "hovered row highlighted")
+  near(hovered._vertex[4], 0.55, "hover highlight")
+  list.region:_fire("OnMouseDown", "LeftButton")
+  near(list.children[list.pressed].region.fxSkinTex.rowHL._vertex[4], 1, "pressed row in full gold")
+  list.region:_fire("OnMouseUp", "LeftButton")
+  W.cursorX, W.cursorY = -100, -100
+  W.nextFrame()
+  header:_click()
+  UI.flush()
+  header = find(root, "HeaderCell")[1].region
+  eq(header.label._color[3], 0, "gold title on the sorted column")
+
+  -- Scrollbars: the fixed knob, never stretched, either way.
+  local knobs = {}
+  for _, n in ipairs(find(root, "List")) do
+    local thumb = n.region.thumb
+    if thumb and thumb.fxSkinTex and thumb.fxSkinTex.knob then knobs[#knobs + 1] = thumb.fxSkinTex.knob end
+  end
+  local sv = find(root, "ScrollView")[1].region.fxScroller
+  for _, thumb in ipairs({ sv.thumbX, sv.thumbY }) do
+    if thumb and thumb.fxSkinTex and thumb.fxSkinTex.knob then knobs[#knobs + 1] = thumb.fxSkinTex.knob end
+  end
+  local sizes = {}
+  for _, k in ipairs(knobs) do
+    eq(k._texture, "Interface\\Buttons\\UI-ScrollBar-Knob", "knob art")
+    sizes[#sizes + 1] = k._w .. "x" .. k._h
+  end
+  table.sort(sizes)
+  eq(table.concat(sizes, ","), "16x24,16x24,24x16", "list and vertical knobs 16x24, horizontal 24x16")
+
+  -- Window: dialog backdrop, banner, gold grip, footer status bar.
+  local winNode = find(root, "Window")[1]
+  local win = winNode.region
+  eq(win._backdrop.bgFile, "Interface\\DialogFrame\\UI-DialogBox-Background", "dialog backdrop")
+  ok(win.header.fxSkinTex.bannerM:IsShown(), "banner")
+  eq(win.grip.lines[1]._color[2], 0xD1 / 255, "gold grip")
+  ok(win.footer.fxHasBackdrop, "footer status bar")
+  win.close:_fire("OnEnter")
+  win.close:_fire("OnLeave")
+  root:update(view("classic", "sm"))
+  eq(winNode.region.header._h, 14, "small window: compact header too")
+  ok(winNode.region.header.fxSkinTex.bannerM:IsShown(), "small window: banner")
+  root:unmount()
+
+  -- The same tree under the default theme reuses the pooled regions.
+  root = UI.mount(UIParent, view(nil))
+  local function hidden(tex, what) ok(not (tex and tex:IsShown()), what) end
+  buttons = find(root, "Button", function(n) return n.parent and n.parent.host and n.parent.host.name == "HStack" end)
+  hidden(buttons[1].region.fxSkinTex.bgM, "button art hidden")
+  ok(buttons[1].region.fxBg:IsShown(), "default button background")
+  badges = find(root, "Badge")
+  ok(not badges[1].region.fxHasBackdrop and badges[1].region.fxBg:IsShown(), "default badge")
+  toggles = find(root, "Toggle")
+  hidden(toggles[1].region.fxSkinTex.box, "checkbox hidden")
+  ok(toggles[1].region.track:IsShown(), "default toggle track")
+  hidden(find(root, "Tab")[2].region.fxSkinTex.onM, "tab art hidden")
+  hidden(find(root, "ItemCell")[1].region.fxSkinTex.iconFrame, "icon frame hidden")
+  meter = find(root, "Meter")[1].region
+  ok(not meter.track.fxHasBackdrop, "meter frame gone")
+  ok(meter.fill._texture ~= "Interface\\TargetingFrame\\UI-StatusBar", "default meter fill")
+  card = find(root, "VStack", function(n) return n.el.props.surface == "card" end)[1].region
+  ok(not card.fxHasBackdrop and card.fxBg:IsShown(), "default card")
+  chart = find(root, "Chart")[1].region
+  ok(not chart.lastTag.fxHasBackdrop and chart.lastTag.bg:IsShown(), "default chart tag")
+  header = find(root, "HeaderCell")[1].region
+  hidden(header.fxSkinTex.colM, "column tab art hidden")
+  list = find(root, "List")[1]
+  hidden(list.children[2].region.fxSkinTex.rowHL, "row highlight hidden")
+  hidden(list.region.thumb.fxSkinTex.knob, "list knob hidden")
+  ok(list.region.thumb.tex:IsShown(), "default list thumb")
+  sv = find(root, "ScrollView")[1].region.fxScroller
+  hidden(sv.thumbY.fxSkinTex.knob, "scroll knob hidden")
+  ok(sv.thumbY.tex:IsShown(), "default scroll thumb")
+  win = find(root, "Window")[1].region
+  ok(not win.fxHasBackdrop and win.headerLine:IsShown(), "default window chrome")
+  hidden(win.header.fxSkinTex.bannerM, "banner hidden")
+  root:unmount()
+  W.items[17] = nil
+end)
+
+test("classic: missing client art falls back to flat drawing and is reported once", function()
+  -- Every client file Classic draws with.
+  local paths = {
+    "Interface\\DialogFrame\\UI-DialogBox-Background", "Interface\\DialogFrame\\UI-DialogBox-Border",
+    "Interface\\Tooltips\\UI-Tooltip-Background", "Interface\\Tooltips\\UI-Tooltip-Border",
+    "Interface\\Buttons\\UI-Panel-Button-Up", "Interface\\Buttons\\UI-Panel-Button-Down",
+    "Interface\\Buttons\\UI-Panel-Button-Disabled", "Interface\\Buttons\\UI-CheckBox-Up",
+    "Interface\\OptionsFrame\\UI-OptionsFrame-ActiveTab", "Interface\\DialogFrame\\UI-DialogBox-Header",
+    "Interface\\FriendsFrame\\WhoFrame-ColumnTabs", "Interface\\QuestFrame\\UI-QuestTitleHighlight",
+    "Interface\\Common\\WhiteIconFrame", "Interface\\Buttons\\UI-Panel-MinimizeButton-Up",
+    "Interface\\TargetingFrame\\UI-StatusBar", "Interface\\Buttons\\UI-ScrollBar-Knob",
+  }
+  W.missingFiles = {}
+  for _, p in ipairs(paths) do W.missingFiles[p] = true end
+  I.wipe(I.textureCache)
+  W.items[17] = true
+  local items = {}
+  for i = 1, 30 do items[i] = { id = i, v = "r" .. i } end
+  local function view()
+    return UI.Window { title = "Flat", width = 560, height = 700, status = "s", theme = "classic",
+      UI.HStack { gap = 4, UI.Button { text = "Go" }, UI.Badge { text = "B" }, UI.Badge { text = "S", solid = true },
+        UI.Toggle { label = "On", checked = true } },
+      UI.TabBar { tabs = { { id = "x", text = "One" }, { id = "y", text = "Two" } }, selected = "x" },
+      UI.ItemCell { item = 17 },
+      UI.Meter { value = 5, max = 10 },
+      UI.Chart { width = 200, height = 100, values = { 1, 2, 3 } },
+      UI.Table { height = 120, items = items, key = "id", selected = 2, onSelect = function() end,
+        columns = { { key = "v", title = "Value", flex = 1 } } },
+    }
+  end
+  local root = UI.mount(UIParent, view())
+  local b = find(root, "Button")[1].region
+  ok(b.fxBg and b.fxBg:IsShown(), "flat button background")
+  ok(not (b.fxSkinTex.bgM and b.fxSkinTex.bgM:IsShown()), "no panel art")
+  local win = find(root, "Window")[1].region
+  ok(not win.fxHasBackdrop and win.fxBg:IsShown(), "flat window")
+  ok(not (win.header.fxSkinTex and win.header.fxSkinTex.bannerM and win.header.fxSkinTex.bannerM:IsShown()), "no banner")
+  ok(win.footer.fxBg:IsShown(), "flat footer")
+  ok(win.close.fxSkinTex.up._color, "flat close button")
+  local t = find(root, "Toggle")[1].region
+  ok(t.fxSkinTex.box._color and t.fxSkinTex.check._color, "flat checkbox")
+  local tab = find(root, "Tab")[1].region
+  ok(tab.fxBg:IsShown(), "flat tab")
+  local rail = find(root, "TabRail")[1].region
+  ok(rail.left.fill:IsShown(), "flat rail")
+  ok(not find(root, "ItemCell")[1].region.fxSkinTex.iconFrame:IsShown(), "no icon frame")
+  local meter = find(root, "Meter")[1].region
+  ok(meter.fill._color and meter.track.fxBg:IsShown(), "flat meter")
+  ok(find(root, "Badge")[1].region.fxBg:IsShown(), "flat badge")
+  ok(find(root, "Badge")[2].region.fxBg:IsShown(), "flat solid badge")
+  ok(find(root, "Chart")[1].region.lastTag.fxBg:IsShown(), "flat chart tag")
+  local list = find(root, "List")[1]
+  ok(list.children[2].region.fxSkinTex.rowHL._color, "flat row highlight")
+  ok(list.region.thumb.tex:IsShown(), "default knob drawing")
+  local reported = {}
+  for _, e in ipairs(W.errors) do
+    local path = e:match("^FxUI Classic: the client has no (.-); using FxUI's own drawing for it$")
+    ok(path, "reported as a missing file: " .. e)
+    ok(not reported[path], "reported once: " .. path)
+    reported[path] = true
+  end
+  ok(reported["Interface\\Buttons\\UI-Panel-Button-Up"], "missing button art reported")
+  W.errors = {}
+  root:update(view())
+  eq(#W.errors, 0, "nothing reported again")
+  root:unmount()
+  W.items[17] = nil
+
+  -- Loaded without the tooltip art, cards keep FxUI's own surface.
+  local bg, edge = "Interface\\Tooltips\\UI-Tooltip-Background", "Interface\\Tooltips\\UI-Tooltip-Border"
+  W.missingFiles = { [bg] = true, [edge] = true }
+  I.wipe(I.textureCache)
+  W.loadAddon("FxUI_Theme_Classic", "FxUI_Theme_Classic")
+  eq(#W.errors, 2, "both files reported when the theme loads")
+  W.errors = {}
+  local host = CreateFrame("Frame")
+  host:SetSize(200, 100)
+  root = UI.mount(host, UI.VStack { surface = "card", UI.Text { text = "card" } }, { theme = "classic" })
+  local card = find(root, "VStack")[1].region
+  ok(not card.fxHasBackdrop and card.fxBg:IsShown(), "FxUI's own card")
+  root:unmount()
+  W.missingFiles = nil
+  I.wipe(I.textureCache)
+  W.loadAddon("FxUI_Theme_Classic", "FxUI_Theme_Classic")
+  root = UI.mount(host, UI.VStack { surface = "card", UI.Text { text = "card" } }, { theme = "classic" })
+  ok(find(root, "VStack")[1].region.fxHasBackdrop, "tooltip card again once the art is there")
+  root:unmount()
+end)
+
+test("classic: layout invariants hold over representative trees at several sizes", function()
+  layoutInvariants("classic")
+end)
+
+test("themes: the theme dropdown lists Classic and Teal", function()
+  local setting = W.settings.settings.FXUI_THEME
+  local names = {}
+  for _, o in ipairs(setting.dropdown()) do names[o.value] = o.label end
+  eq(names.default, "FxUI Dark")
+  eq(names.classic, "Classic")
+  eq(names.teal, "FxUI Teal")
+  setting:SetValue("classic")
+  eq(UI.themeName, "classic")
+  eq(FxUIDB.theme, "classic", "saved")
+  setting:SetValue("teal")
+  eq(UI.themeName, "teal")
+  setting:SetValue("default")
+  eq(UI.themeName, "default")
 end)
 
 ---------------------------------------------------------------------------
