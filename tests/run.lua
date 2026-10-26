@@ -757,6 +757,33 @@ test("themes: a skinned theme draws every component; pooled regions are clean af
   W.items[17] = nil
 end)
 
+test("themes: a window scroller paints with the window's own theme, also after an update and when pooled", function()
+  local log = {}
+  local function skinOf(tag) return { Scroll = { paintThumb = function() log[#log + 1] = tag end } } end
+  UI.registerTheme({ name = "t-sc-a", base = "default", skins = skinOf("A") })
+  UI.registerTheme({ name = "t-sc-b", base = "default", skins = skinOf("B") })
+  local rows = {}
+  for i = 1, 10 do rows[i] = UI.HStack { height = 40, UI.Text { text = "Row " .. i } } end
+  local function view(theme) return UI.Window { title = "Tall", width = 300, height = 248, theme = theme, rows } end
+  local function only(tag, what)
+    ok(#log > 0, what .. ": thumbs painted")
+    for _, t in ipairs(log) do eq(t, tag, what) end
+    log = {}
+  end
+  local root = UI.mount(UIParent, view("t-sc-a"))
+  only("A", "mounted under A")
+  root:update(view("t-sc-b"))
+  only("B", "updated from A to B paints only B's skin")
+  root:unmount()
+  log = {}
+  root = UI.mount(UIParent, view("t-sc-a"))
+  log = {}
+  root:unmount()
+  root = UI.mount(UIParent, view("t-sc-b"))
+  only("B", "pooled window reused under B")
+  root:unmount()
+end)
+
 test("themes: textureExists probes client art and caches the answer", function()
   W.missingFiles = { ["Interface\\Missing\\Art"] = true }
   I.wipe(I.textureCache)

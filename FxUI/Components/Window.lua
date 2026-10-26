@@ -254,6 +254,7 @@ I.defineHost("Window", {
     I.setText(f.title, p.title or "", size.title, size.titleColor or I.mix("text", "gold", 0.12))
     if skin and skin.paint then skin.paint(f, p, size) end
     f.close.paint(f.close)
+    f.body.fxScroller.theme = node.theme
     I.paintScroller(f.body.fxScroller)
     f.close:SetShown(p.closable ~= false)
     f.grip:SetShown(not p.dock)
