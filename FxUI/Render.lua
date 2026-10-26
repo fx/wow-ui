@@ -513,57 +513,80 @@ local function wrapLayout(kids, props, w, h)
   end
 end
 
--- Natural size of a stack of child nodes.
-function I.stackMeasure(kids, props, horizontal, maxW, maxH)
-  if horizontal and props.wrap then return wrapMeasure(kids, props, maxW, maxH) end
-  local t, r, b, l = I.padding(props.padding)
-  local gap = props.gap or 0
-  local innerW, innerH = (maxW or HUGE) - l - r, (maxH or HUGE) - t - b
+-- Main-axis sizes of a stack's children inside an innerW x innerH box: the
+-- one computation both measuring and placing use, so a stack is measured
+-- exactly as it will be placed. Fixed children get their natural size, each
+-- within what the children before it leave (a flexible child counting at its
+-- minimum); flexible children share what the fixed children and gaps leave,
+-- in proportion to their flex, never below their minimum, and are measured
+-- at that share. Along an unbounded main axis (measuring with no limit) a
+-- flexible child keeps its minimum and is measured without a limit.
+-- Returns mains, crosses, flexes, totalFlex and the free space.
+local function stackSizes(kids, props, horizontal, innerW, innerH)
   local innerMain = horizontal and innerW or innerH
-  local main, cross, totalFlex = 0, 0, 0
-  local flexes = {}
+  local n = #kids
+  local mains, crosses, flexes = {}, {}, {}
+  local used, reserved, totalFlex = 0, 0, 0
 
-  -- Fixed children first, each limited to what is left.
-  for i = 1, #kids do
+  for i = 1, n do
     local c = kids[i]
     local flex = (not props.noFlex and layoutProp(c, "flex")) or 0
     flexes[i] = flex
     if flex > 0 then
       totalFlex = totalFlex + flex
-      main = main + ((horizontal and layoutProp(c, "minWidth") or layoutProp(c, "minHeight")) or 0)
+      mains[i] = (horizontal and layoutProp(c, "minWidth") or layoutProp(c, "minHeight")) or 0
+      reserved = reserved + mains[i]
     else
       local cw, ch
       if horizontal then
-        cw, ch = measureChild(c, true, math.max(innerW - main, 0), innerH)
+        cw, ch = measureChild(c, true, math.max(innerW - used - reserved, 0), innerH)
+        mains[i], crosses[i] = cw, ch
       else
-        cw, ch = measureChild(c, false, innerW, math.max(innerH - main, 0))
+        cw, ch = measureChild(c, false, innerW, math.max(innerH - used - reserved, 0))
+        mains[i], crosses[i] = ch, cw
       end
-      local m, x = cw, ch
-      if not horizontal then m, x = ch, cw end
-      main = main + m
-      if x > cross then cross = x end
+      used = used + mains[i]
     end
   end
 
-  -- Flexible children are measured at the share they will get, so their
-  -- cross size (e.g. a wrapping row's height) matches the final layout.
+  local free = innerMain - used - (props.gap or 0) * math.max(n - 1, 0)
   if totalFlex > 0 then
-    local free = innerMain - main - gap * math.max(#kids - 1, 0)
-    for i = 1, #kids do
-      local flex = flexes[i]
-      if flex > 0 then
-        local c = kids[i]
-        local share = free < HUGE / 2 and math.max(free * flex / totalFlex, 0) or nil
+    local unbounded = free >= HUGE / 2
+    local share = math.max(free, 0)
+    for i = 1, n do
+      if flexes[i] > 0 then
+        local m = mains[i]
+        if not unbounded then m = math.max(m, share * flexes[i] / totalFlex) end
         local cw, ch
         if horizontal then
-          cw, ch = measureChild(c, true, share or innerW, innerH)
+          cw, ch = measureChild(kids[i], true, unbounded and innerW or m, innerH)
         else
-          cw, ch = measureChild(c, false, innerW, share or innerH)
+          cw, ch = measureChild(kids[i], false, innerW, unbounded and innerH or m)
         end
-        local x = horizontal and ch or cw
-        if x > cross then cross = x end
+        mains[i], crosses[i] = m, horizontal and ch or cw
       end
     end
+  end
+  return mains, crosses, flexes, totalFlex, free
+end
+
+-- Natural size of a stack of child nodes: fixed children at their natural
+-- size and flexible ones at their minimum along the main axis; across it,
+-- the largest child, each measured as stackSizes places it.
+function I.stackMeasure(kids, props, horizontal, maxW, maxH)
+  if horizontal and props.wrap then return wrapMeasure(kids, props, maxW, maxH) end
+  local t, r, b, l = I.padding(props.padding)
+  local gap = props.gap or 0
+  local innerW, innerH = (maxW or HUGE) - l - r, (maxH or HUGE) - t - b
+  local mains, crosses, flexes = stackSizes(kids, props, horizontal, innerW, innerH)
+  local main, cross = 0, 0
+  for i = 1, #kids do
+    if flexes[i] > 0 then
+      main = main + ((horizontal and layoutProp(kids[i], "minWidth") or layoutProp(kids[i], "minHeight")) or 0)
+    else
+      main = main + mains[i]
+    end
+    if crosses[i] > cross then cross = crosses[i] end
   end
 
   main = main + gap * math.max(#kids - 1, 0)
@@ -577,51 +600,11 @@ function I.stackLayout(kids, props, horizontal, w, h)
   local t, r, b, l = I.padding(props.padding)
   local gap = props.gap or 0
   local innerW, innerH = math.max(w - l - r, 0), math.max(h - t - b, 0)
-  local innerMain, innerCross = innerW, innerH
-  if not horizontal then innerMain, innerCross = innerH, innerW end
+  local innerCross = horizontal and innerH or innerW
   local n = #kids
-  local mains, crosses, flexes = {}, {}, {}
-  local used, totalFlex = 0, 0
-
-  for i = 1, n do
-    local c = kids[i]
-    local flex = (not props.noFlex and layoutProp(c, "flex")) or 0
-    flexes[i] = flex
-    if flex > 0 then
-      totalFlex = totalFlex + flex
-      mains[i] = (horizontal and layoutProp(c, "minWidth") or layoutProp(c, "minHeight")) or 0
-    else
-      local cw, ch
-      if horizontal then
-        cw, ch = measureChild(c, true, math.max(innerW - used, 0), innerH)
-        mains[i], crosses[i] = cw, ch
-      else
-        cw, ch = measureChild(c, false, innerW, math.max(innerH - used, 0))
-        mains[i], crosses[i] = ch, cw
-      end
-      used = used + mains[i]
-    end
-  end
-
-  local gaps = gap * math.max(n - 1, 0)
-  local free = innerMain - used - gaps
+  local mains, crosses, _, totalFlex, free = stackSizes(kids, props, horizontal, innerW, innerH)
   local offset, between = 0, gap
-  if totalFlex > 0 then
-    local share = math.max(free, 0)
-    for i = 1, n do
-      if flexes[i] > 0 then
-        local m = math.max(mains[i], share * flexes[i] / totalFlex)
-        mains[i] = m
-        local cw, ch
-        if horizontal then
-          cw, ch = measureChild(kids[i], true, m, innerH)
-        else
-          cw, ch = measureChild(kids[i], false, innerW, m)
-        end
-        crosses[i] = horizontal and ch or cw
-      end
-    end
-  elseif free > 0 then
+  if totalFlex == 0 and free > 0 then
     local justify = props.justify or "start"
     if justify == "center" then
       offset = free / 2

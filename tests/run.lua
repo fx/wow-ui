@@ -1709,6 +1709,39 @@ test("table: changing the sorted column's sortValue sorts again", function()
   root:unmount()
 end)
 
+test("layout: a flexible child is measured at the width it is placed at", function()
+  local host = CreateFrame("Frame")
+  host:SetSize(200, 400)
+  local function chips()
+    local out = {}
+    for i = 1, 7 do out[i] = UI.HStack { width = 50, height = 20 } end
+    return out
+  end
+  local function isWrap(n) return n.el.props.wrap end
+  local function isRow(n) return n.el.props.width == 200 end
+
+  -- A flexible wrapping child with a minimum gets the whole 200 px and
+  -- needs two lines of four; the row must be measured that tall.
+  local root = UI.mount(host, UI.VStack { align = "start",
+    UI.HStack { width = 200, align = "start", UI.HStack { wrap = true, flex = 1, minWidth = 100, chips() } },
+  })
+  local wrap, row = find(root, "HStack", isWrap)[1], find(root, "HStack", isRow)[1]
+  eq(wrap.w, 200, "placed at the full share")
+  eq(row.h, 40, "measured at that share: two lines of four")
+  root:unmount()
+
+  -- A fixed child after a flexible one is measured, and placed, within what
+  -- the flexible child's minimum leaves.
+  root = UI.mount(host, UI.VStack { align = "start",
+    UI.HStack { width = 200, align = "start", UI.HStack { flex = 1, minWidth = 100 }, UI.HStack { wrap = true, chips() } },
+  })
+  wrap, row = find(root, "HStack", isWrap)[1], find(root, "HStack", isRow)[1]
+  ok(wrap.x + wrap.w <= 200, "the fixed child stays inside the row: " .. tostring(wrap.x + wrap.w))
+  eq(wrap.h, 80, "four lines of two")
+  eq(row.h, wrap.h, "the row is measured as tall as the child it places")
+  root:unmount()
+end)
+
 ---------------------------------------------------------------------------
 
 for _, t in ipairs(tests) do
