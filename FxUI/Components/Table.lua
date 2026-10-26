@@ -147,7 +147,7 @@ end
 -- items, key, rowHeight, striped, selected, onSelect(item, i, key),
 -- defaultSort = { key, desc }, or controlled: sort = { key, desc } with
 -- onSort(key, desc). Other props pass to the list (empty, highlight, ...).
-UI.Table = UI.component("Table", {
+UI.Table = I.defineComponent("Table", {
   init = function(ctx, props)
     local d = props.defaultSort
     ctx.state.sortKey = d and d.key

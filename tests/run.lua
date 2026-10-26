@@ -1291,6 +1291,62 @@ test("library: an upgrade keeps mounted trees, scale followers, pools and settin
   LibStub, SlashCmdList.FXUI_COMMANDS = realLibStub, realSlash
 end)
 
+test("library: nodes an older copy mounted reconcile as the same types under the newer copy", function()
+  local realLibStub, realSlash = LibStub, SlashCmdList.FXUI_COMMANDS
+  LibStub = nil
+  loadCopy("SomeAddon", "SomeAddon/Libs/FxUI", 1)
+  local old = LibStub("FxUI-1.0")
+  local items = {}
+  for i = 1, 100 do items[i] = { id = i, name = "Item " .. i, price = i * 10 } end
+  local function tree(L)
+    return L.VStack {
+      align = "stretch",
+      L.List { height = 100, items = items, key = "id", rowHeight = 20, render = function(it) return L.Text { text = it.name } end },
+      L.Table { height = 120, items = items, key = "name", rowHeight = 20,
+        columns = { { key = "name", title = "Name", flex = 1 }, { key = "price", title = "Price", width = 80 } } },
+      L.TabBar { tabs = { { id = "a", text = "Alpha" }, { id = "b", text = "Beta" } }, selected = "a" },
+      L.Legend { items = { { label = "Bid", value = 1, color = "gold" } } },
+    }
+  end
+  local host = CreateFrame("Frame")
+  host:SetSize(400, 400)
+  local root = old.mount(host, tree(old))
+  local function nodes()
+    local out = { list = find(root, "List")[1], hosts = {} }
+    walk(root.node, function(n)
+      if n.def then out[n.def.name] = n end
+      if n.host then out.hosts[#out.hosts + 1] = n end
+    end)
+    return out
+  end
+  find(root, "List")[1].region:_fire("OnMouseWheel", -1)
+  local before = nodes()
+  for _, name in ipairs({ "Table", "TabBar", "Legend" }) do ok(before[name], name .. " mounted") end
+  local offset = before.list.offset
+  ok(offset > 0, "the older copy's list scrolled")
+
+  loadCopy("NewerAddon", "NewerAddon/Libs/FxUI", 2)
+  local lib = LibStub("FxUI-1.0")
+  eq(lib.MINOR, 2, "the newer copy is registered")
+  root:update(tree(lib))
+  local after = nodes()
+  ok(after.list == before.list, "the list node is kept")
+  eq(after.list.offset, offset, "the list keeps its scroll offset")
+  for _, name in ipairs({ "Table", "TabBar", "Legend" }) do
+    ok(after[name] == before[name], name .. " node is kept")
+  end
+  eq(#after.hosts, #before.hosts, "as many host nodes")
+  for i, n in ipairs(before.hosts) do
+    ok(after.hosts[i] == n, "host node " .. i .. " (" .. n.host.name .. ") is kept")
+  end
+  lib.scrollListTo(after.list.region, 10)
+  eq(after.list.offset, 9 * 20, "scrollListTo works on a list the older copy mounted")
+  ok(lib.component("Table", function() return lib.Text {} end) ~= lib.Table, "a consumer component never takes over a built-in one")
+
+  root:unmount()
+  LibStub, SlashCmdList.FXUI_COMMANDS = realLibStub, realSlash
+end)
+
 test("library: an embedded copy upgrading the standalone addon keeps its saved settings working", function()
   local realLibStub, realSlash = LibStub, SlashCmdList.FXUI_COMMANDS
   LibStub = nil

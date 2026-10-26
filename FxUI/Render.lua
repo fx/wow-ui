@@ -52,10 +52,23 @@ function UI.map(list, fn)
   return out
 end
 
+-- Built-in element types by name. An upgrade keeps these tables: a newer
+-- copy refills each one in place instead of replacing it, so nodes and
+-- elements the older copy made keep the same type identity (the reconciler
+-- matches types by table) and run the newer copy's definition.
 I.hosts = I.hosts or {}
+I.components = I.components or {}
+
+local function adopt(existing, def)
+  if not existing or existing == def then return def end
+  I.wipe(existing)
+  for k, v in pairs(def) do existing[k] = v end
+  return existing
+end
 
 -- A host is a built-in element type backed by a pooled client region.
 function I.defineHost(name, def)
+  def = adopt(I.hosts[name], def)
   def.name = name
   def.isHost = true
   I.hosts[name] = def
@@ -67,12 +80,25 @@ local componentMeta = {
   __call = function(def, t) return makeElement(def, t) end,
 }
 
--- UI.component(name, render) or UI.component(name, { init, render, mounted, unmounted })
-function UI.component(name, spec)
+local function componentDef(name, spec)
   local def = type(spec) == "function" and { render = spec } or spec
   assert(type(def.render) == "function", "FxUI: component needs a render function")
   def.name = name
   def.isComponent = true
+  return def
+end
+
+-- UI.component(name, render) or UI.component(name, { init, render, mounted, unmounted })
+function UI.component(name, spec)
+  return setmetatable(componentDef(name, spec), componentMeta)
+end
+
+-- A built-in component: like UI.component, but kept across upgrades by name
+-- like a host. Consumer components are theirs to keep, so UI.component
+-- registers nothing.
+function I.defineComponent(name, spec)
+  local def = adopt(I.components[name], componentDef(name, spec))
+  I.components[name] = def
   return setmetatable(def, componentMeta)
 end
 

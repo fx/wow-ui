@@ -814,7 +814,7 @@ end
 
 -- Props: items = { { label, value (text, number or element), color,
 -- shape = "dot" | "line" | "dash" } }, gap, rowGap.
-UI.Legend = UI.component("Legend", function(props)
+UI.Legend = I.defineComponent("Legend", function(props)
   local chips = {}
   for i, it in ipairs(props.items or {}) do
     local value = it.value

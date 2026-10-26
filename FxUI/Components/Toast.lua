@@ -5,7 +5,7 @@ local I = UI._internal
 
 local TONE_COLORS = { neutral = "muted", gold = "gold", info = "info", up = "up", down = "down", warn = "warn" }
 
-local ToastStack = UI.component("FxToastStack", {
+local ToastStack = I.defineComponent("FxToastStack", {
   init = function(ctx)
     ctx.state.items = {}
   end,

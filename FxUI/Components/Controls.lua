@@ -461,7 +461,7 @@ I.defineHost("TabRail", {
 })
 
 -- Props: tabs = { { id, text, count } }, selected, onSelect(id), padding.
-UI.TabBar = UI.component("TabBar", function(props)
+UI.TabBar = I.defineComponent("TabBar", function(props)
   local tabs = {}
   for i, t in ipairs(props.tabs or {}) do
     tabs[i] = UI.Tab {

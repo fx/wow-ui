@@ -47,6 +47,7 @@ Supporting folders: `tests/` (headless tests and the client stub), `tools/` (sna
 - FxUI MUST register through LibStub as `FxUI-1.0` with an integer minor version, so that when several addons carry copies the copy with the highest minor is the one every addon uses.
 - A copy whose minor is not newer than the registered one MUST load without side effects.
 - A minor version bump MUST NOT break a consumer written against an earlier minor of `FxUI-1.0`.
+- Trees an older copy mounted MUST keep working under the newer copy: updating them with the newer copy's elements MUST reuse their nodes and keep their state.
 - FxUI MUST resolve its media paths from the folder it was actually loaded from, so a copy embedded inside another addon finds its fonts and textures.
 - Only the standalone `FxUI` addon MAY own saved settings and register an Options category; an embedded copy leaves that to its host addon.
 
@@ -167,7 +168,7 @@ Textures are uncompressed 32-bit TGA, white so the client can tint them, and nin
 
 ### Load order
 
-`FxUI/FxUI.toc` loads, in order: `Libs/LibStub/LibStub.lua`, `Core.lua`, `Themes/Default.lua`, `Theme.lua`, `Format.lua`, `Render.lua`, `Surface.lua`, `Commands.lua`, `Scale.lua`, then `Components/Layout.lua`, `Controls.lua`, `Data.lua`, `List.lua`, `Table.lua`, `Window.lua`, `Toast.lua`. Each file after `Core.lua` returns early when the namespace holds no library (an older copy). Shared internals live on `UI._internal`, which is not public API. A newer copy loading over an older one keeps that table: its state (mounted roots, region pools, scale followers, the toast stack, saved-settings handles, registered themes and commands) carries over, and the newer copy's files replace the functions, re-register the library's event handlers on the same event frame, and give roots the older copy mounted its own root methods. Cached resolved themes are rebuilt by the newer copy.
+`FxUI/FxUI.toc` loads, in order: `Libs/LibStub/LibStub.lua`, `Core.lua`, `Themes/Default.lua`, `Theme.lua`, `Format.lua`, `Render.lua`, `Surface.lua`, `Commands.lua`, `Scale.lua`, then `Components/Layout.lua`, `Controls.lua`, `Data.lua`, `List.lua`, `Table.lua`, `Window.lua`, `Toast.lua`. Each file after `Core.lua` returns early when the namespace holds no library (an older copy). Shared internals live on `UI._internal`, which is not public API. A newer copy loading over an older one keeps that table: its state (mounted roots, region pools, scale followers, the toast stack, saved-settings handles, registered themes and commands) carries over, and the newer copy's files replace the functions, re-register the library's event handlers on the same event frame, and give roots the older copy mounted its own root methods. The built-in host and component definitions (every `UI.<Host>` and the built-in components such as `UI.Table`, `UI.TabBar` and `UI.Legend`) are kept by name and refilled in place rather than replaced, so nodes the older copy mounted reconcile as the same types under the newer copy's elements: they are updated, not recreated, and keep their state (a list's scroll offset, a table's sort). Components a consumer defines with `UI.component` are not registered by name. Cached resolved themes are rebuilt by the newer copy.
 
 The standalone addon saves `FxUIDB` (account-wide): `scale` and `theme`.
 
