@@ -1234,6 +1234,80 @@ test("library: embedded copies find their media; the newest copy wins", function
   LibStub, SlashCmdList.FXUI_COMMANDS = realLibStub, realSlash
 end)
 
+test("library: an upgrade keeps mounted trees, scale followers, pools and settings", function()
+  local realLibStub, realSlash = LibStub, SlashCmdList.FXUI_COMMANDS
+  LibStub = nil
+  loadCopy("SomeAddon", "SomeAddon/Libs/FxUI", 1)
+  local old = LibStub("FxUI-1.0")
+  local oldI = old._internal
+  old.registerTheme("t-upgrade", "default", { colors = { gold = "#00FF00" } })
+  local host = CreateFrame("Frame")
+  host:SetSize(100, 100)
+  local root = old.mount(host, old.Text { text = "a", color = "gold" })
+  local win = old.mount(UIParent, old.Window { title = "w", width = 300, height = 200 })
+  local wf = find(win, "Window")[1].region
+  oldI.db = { theme = "default" }
+  local oldTable = oldI.resolve({ name = "inline-old", fonts = { body = { file = "Inter-Regular.ttf", size = 20 } } })
+  old.toast("from the older copy")
+  local released = old.mount(host, old.VStack { bg = "panel" })
+  released:unmount()
+  local pooled = old.stats().VStack.pooled
+  ok(pooled > 0, "a pooled region")
+
+  loadCopy("NewerAddon", "NewerAddon/Libs/FxUI", 2)
+  local lib = LibStub("FxUI-1.0")
+  local I2 = lib._internal
+  eq(lib.MINOR, 2, "the newer copy is registered")
+  eq(I2.db and I2.db.theme, "default", "settings state survives")
+  eq(lib.stats().VStack.pooled, pooled, "pooled regions survive")
+
+  lib.setTheme("t-upgrade")
+  eq(find(root, "Text")[1].region._color[2], 1, "setTheme from the newer copy restyles a tree the older copy mounted")
+  eq(I2.db.theme, "t-upgrade", "the choice is saved")
+  lib.setScale(1.5)
+  eq(wf:GetScale(), 1.5, "setScale reaches a window the older copy mounted")
+
+  local newTable = I2.resolve({ name = "inline-new", fonts = { body = { file = "Inter-Regular.ttf", size = 30 } } })
+  ok(newTable.fonts.body ~= oldTable.fonts.body, "theme tables resolved after the upgrade get their own fonts")
+  eq(select(2, oldTable.fonts.body:GetFont()), 20, "a table resolved before the upgrade keeps its fonts")
+
+  lib.toast("from the newer copy")
+  eq(#I2.toast.root.node.ctx.state.items, 2, "both copies' toasts share one stack")
+
+  local calls = 0
+  local function listener() calls = calls + 1 end
+  I2.combatListeners[listener] = true
+  W.fireEvent("PLAYER_REGEN_DISABLED")
+  eq(calls, 1, "one dispatch per event after the upgrade")
+  ok(lib.inCombat(), "combat state follows")
+  W.fireEvent("PLAYER_REGEN_ENABLED")
+  I2.combatListeners[listener] = nil
+
+  lib.setScale(1)
+  lib.setTheme("default")
+  root:unmount()
+  win:unmount()
+  W.advance(10)
+  LibStub, SlashCmdList.FXUI_COMMANDS = realLibStub, realSlash
+end)
+
+test("library: an embedded copy upgrading the standalone addon keeps its saved settings working", function()
+  local realLibStub, realSlash = LibStub, SlashCmdList.FXUI_COMMANDS
+  LibStub = nil
+  loadCopy("FxUI", "FxUI", 1)
+  local I1 = LibStub("FxUI-1.0")._internal
+  I1.db = { theme = "t-saved" } -- what ADDON_LOADED sets up from FxUIDB
+  loadCopy("NewerAddon", "NewerAddon/Libs/FxUI", 2)
+  local lib = LibStub("FxUI-1.0")
+  local I2 = lib._internal
+  ok(I2.eventHandlers.ADDON_LOADED and next(I2.eventHandlers.ADDON_LOADED), "the standalone addon's settings handler is kept")
+  lib.registerTheme("t-saved", "default", {})
+  I2.events:_fire("OnEvent", "PLAYER_LOGIN")
+  eq(lib.themeName, "t-saved", "the saved theme is applied at login")
+  lib.setTheme("default")
+  LibStub, SlashCmdList.FXUI_COMMANDS = realLibStub, realSlash
+end)
+
 ---------------------------------------------------------------------------
 
 for _, t in ipairs(tests) do

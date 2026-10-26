@@ -85,9 +85,11 @@ local function registerSettings()
   I.settingsCategory = category
 end
 
-if ADDON == "FxUI" then
+-- A newer embedded copy loading over the standalone addon keeps doing its part.
+I.standalone = I.standalone or ADDON == "FxUI"
+if I.standalone then
   I.on("ADDON_LOADED", function(_, name)
-    if name ~= ADDON then return end
+    if name ~= "FxUI" then return end
     FxUIDB = FxUIDB or {}
     I.db = FxUIDB
     UI.setScale(FxUIDB.scale or 1)

@@ -25,24 +25,26 @@ local ToastStack = UI.component("FxToastStack", {
   end,
 })
 
-local host, root
-local nextId = 0
+-- One toast stack for every copy of the library: an upgrade keeps it.
+I.toast = I.toast or { nextId = 0 }
+local T = I.toast
 
 -- Show a transient one-line notice at the top of the screen.
 -- opts: tone (neutral|gold|info|up|down|warn), duration (seconds, default 4).
 function UI.toast(text, opts)
   opts = opts or {}
-  if not host then
-    host = CreateFrame("Frame", nil, UIParent)
+  if not T.host then
+    local host = CreateFrame("Frame", nil, UIParent)
     host:SetFrameStrata("DIALOG")
     host:SetSize(640, 400)
     host:SetPoint("TOP", UIParent, "TOP", 0, -140)
     I.followScale(host, false)
-    root = UI.mount(host, ToastStack {})
+    T.host = host
+    T.root = UI.mount(host, ToastStack {})
   end
-  local ctx = root.node.ctx
-  nextId = nextId + 1
-  local id = nextId
+  local ctx = T.root.node.ctx
+  T.nextId = T.nextId + 1
+  local id = T.nextId
   local items = ctx.state.items
   items[#items + 1] = { id = id, text = text, tone = opts.tone }
   while #items > 5 do table.remove(items, 1) end

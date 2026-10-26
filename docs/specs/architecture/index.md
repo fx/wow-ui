@@ -167,7 +167,7 @@ Textures are uncompressed 32-bit TGA, white so the client can tint them, and nin
 
 ### Load order
 
-`FxUI/FxUI.toc` loads, in order: `Libs/LibStub/LibStub.lua`, `Core.lua`, `Themes/Default.lua`, `Theme.lua`, `Format.lua`, `Render.lua`, `Surface.lua`, `Commands.lua`, `Scale.lua`, then `Components/Layout.lua`, `Controls.lua`, `Data.lua`, `List.lua`, `Table.lua`, `Window.lua`, `Toast.lua`. Each file after `Core.lua` returns early when the namespace holds no library (an older copy). Shared internals live on `UI._internal`, which is not public API.
+`FxUI/FxUI.toc` loads, in order: `Libs/LibStub/LibStub.lua`, `Core.lua`, `Themes/Default.lua`, `Theme.lua`, `Format.lua`, `Render.lua`, `Surface.lua`, `Commands.lua`, `Scale.lua`, then `Components/Layout.lua`, `Controls.lua`, `Data.lua`, `List.lua`, `Table.lua`, `Window.lua`, `Toast.lua`. Each file after `Core.lua` returns early when the namespace holds no library (an older copy). Shared internals live on `UI._internal`, which is not public API. A newer copy loading over an older one keeps that table: its state (mounted roots, region pools, scale followers, the toast stack, saved-settings handles, registered themes and commands) carries over, and the newer copy's files replace the functions, re-register the library's event handlers on the same event frame, and give roots the older copy mounted its own root methods. Cached resolved themes are rebuilt by the newer copy.
 
 The standalone addon saves `FxUIDB` (account-wide): `scale` and `theme`.
 

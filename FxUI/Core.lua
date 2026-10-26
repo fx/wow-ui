@@ -8,8 +8,11 @@ if not UI then return end
 
 UI.MAJOR, UI.MINOR = MAJOR, MINOR
 
--- Shared between FxUI's own files; not part of the public API.
-local I = {}
+-- Shared between FxUI's own files; not part of the public API. A newer copy
+-- loading over an older one keeps this table, so live state (mounted roots,
+-- pools, scale followers, settings) carries over; each file keeps its state
+-- tables (`I.x = I.x or ...`) and replaces only the functions.
+local I = UI._internal or {}
 UI._internal = I
 
 -- Resolve the folder this copy was loaded from, so media paths work both for
@@ -68,8 +71,10 @@ function I.safecall(fn, ...)
   return true, a, b, c
 end
 
--- Library-wide client event dispatch.
-I.events = CreateFrame("Frame")
+-- Library-wide client event dispatch. An upgrade keeps the frame and drops
+-- the older copy's handlers and combat listeners, which the newer copy's files
+-- register again as they load.
+I.events = I.events or CreateFrame("Frame")
 I.eventHandlers = {}
 
 I.events:SetScript("OnEvent", function(_, event, ...)

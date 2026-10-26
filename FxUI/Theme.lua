@@ -37,9 +37,12 @@ UI.QUALITY_TOKENS = { [0] = "poor", "common", "uncommon", "rare", "epic", "legen
 UI.themes = UI.themes or {}
 
 
-I.resolved = I.resolved or {}
+-- Resolved themes: registered names in I.resolved, unregistered definition
+-- tables in I.resolvedTables. Loading a newer copy drops the named cache,
+-- since its definitions and flattening may differ.
+I.resolved = I.wipe(I.resolved or {})
 I.resolvedTables = I.resolvedTables or setmetatable({}, { __mode = "k" })
-local nextThemeId = 0
+I.nextThemeId = I.nextThemeId or 0
 
 local function safeId(name)
   return (tostring(name):gsub("[^%w]", "_"))
@@ -116,8 +119,8 @@ function I.resolve(ref)
     if ref.fonts and ref.fontSpecs then return ref end -- already resolved
     local t = I.resolvedTables[ref]
     if not t then
-      nextThemeId = nextThemeId + 1
-      t = flatten(ref, "custom" .. nextThemeId)
+      I.nextThemeId = I.nextThemeId + 1
+      t = flatten(ref, "custom" .. I.nextThemeId)
       I.resolvedTables[ref] = t
     end
     return t

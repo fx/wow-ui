@@ -690,6 +690,8 @@ I.roots = I.roots or {}
 
 local Root = {}
 Root.__index = Root
+-- Roots an older copy mounted take this copy's methods.
+for root in pairs(I.roots) do setmetatable(root, Root) end
 
 local function onParentSize(frame)
   for root in pairs(I.roots) do
