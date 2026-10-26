@@ -93,7 +93,7 @@ A scroll area is a clipping box whose content scrolls when it is larger than the
 - A scrollbar MUST take its gutter from the other axis; when that makes the content overflow the other axis too, that axis MUST scroll as well (for `both`).
 - The mouse wheel MUST scroll vertically, or horizontally when Shift is held or when there is nothing to scroll vertically, by 48 px per notch, clamped to the range; scrolling MUST move the content without laying it out again.
 - A scrollbar's thumb MUST be proportional to the visible fraction (at least 24 px), follow the offset, and scroll the content when dragged.
-- A re-layout MUST keep the current offset, clamped to the new range; a released scroll area MUST start at offset 0 when reused.
+- A re-layout MUST keep the current offset, clamped to the new range; a released scroll area MUST start at offset 0 when reused, with no scrollbar, hover or drag carried over.
 - The gutter and thumb thickness come from the theme's `Scroll` metrics (default 10 and 6; [theming](../theming/)).
 
 #### Scenario: Vertical scroll

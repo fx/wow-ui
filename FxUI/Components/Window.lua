@@ -363,10 +363,11 @@ I.defineHost("Window", {
     local props = { gap = p.gap or 0, padding = p.padding, align = "stretch" }
     local sc = f.body.fxScroller
     if p.scroll == false then
-      sc.maxX, sc.maxY = 0, 0
-      I.scrollTo(sc, 0, 0)
-      sc.content:SetSize(bodyW, bodyH)
+      sc.viewW, sc.viewH, sc.contentW, sc.contentH = bodyW, bodyH, bodyW, bodyH
+      sc.content:SetSize(math.max(bodyW, 0), math.max(bodyH, 0))
       I.stackLayout(node.children or {}, props, false, bodyW, bodyH)
+      I.scrollOff(sc)
+      node.scroll = false
     else
       node.scroll = I.scrollLayout(sc, node.children or {}, props, bodyW, bodyH)
     end
@@ -374,8 +375,7 @@ I.defineHost("Window", {
 
   release = function(node)
     I.unfollowScale(node.region)
-    local sc = node.region.body.fxScroller
-    sc.offsetX, sc.offsetY = 0, 0
+    I.resetScroller(node.region.body.fxScroller)
     if node.headerChildren then
       for i = 1, #node.headerChildren do I.releaseNode(node.headerChildren[i]) end
       node.headerChildren = nil

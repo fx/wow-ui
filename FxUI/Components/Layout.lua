@@ -276,6 +276,24 @@ function I.createScroller(clip)
   return sc
 end
 
+-- Stop scrolling: no range, offset 0, no scrollbars.
+function I.scrollOff(sc)
+  sc.maxX, sc.maxY = 0, 0
+  showAxis(sc.thumbX, false)
+  showAxis(sc.thumbY, false)
+  I.scrollTo(sc, 0, 0)
+end
+
+-- A released scroll area is clean for its next user: not scrolled, no
+-- scrollbars, no thumb hovered or dragged.
+function I.resetScroller(sc)
+  for _, thumb in ipairs({ sc.thumbX, sc.thumbY }) do
+    thumb.fxDrag, thumb.fxHover = nil, false
+    thumb:SetScript("OnUpdate", nil)
+  end
+  I.scrollOff(sc)
+end
+
 function I.paintScroller(sc)
   sc.thumbW = thumbW()
   sc.thumbY.track:SetWidth(sc.thumbW)
@@ -328,13 +346,10 @@ function I.scrollLayout(sc, kids, props, w, h, opts)
   sc.viewW, sc.viewH = viewW, viewH
 
   if not overX and not overY then
-    sc.maxX, sc.maxY = 0, 0
     sc.contentW, sc.contentH = w, h
     sc.content:SetSize(math.max(w, 0), math.max(h, 0))
     I.stackLayout(kids, props, horizontal, w, h)
-    showAxis(sc.thumbX, false)
-    showAxis(sc.thumbY, false)
-    I.scrollTo(sc, 0, 0)
+    I.scrollOff(sc)
     return false
   end
 
@@ -382,11 +397,6 @@ I.defineHost("ScrollView", {
     node.scroll = I.scrollLayout(node.region.fxScroller, node.children, props, w, h, { axis = axis, horizontal = horizontal })
   end,
   release = function(node)
-    local sc = node.region.fxScroller
-    sc.offsetX, sc.offsetY = 0, 0
-    for _, thumb in ipairs({ sc.thumbX, sc.thumbY }) do
-      thumb.fxDrag = nil
-      thumb:SetScript("OnUpdate", nil)
-    end
+    I.resetScroller(node.region.fxScroller)
   end,
 })

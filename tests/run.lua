@@ -1345,6 +1345,50 @@ test("layout: wrapped lines honour every justify value", function()
   end
 end)
 
+test("scroll: scrollbars go away with scroll = false and on a reused region", function()
+  local function rows()
+    local out = {}
+    for i = 1, 10 do out[i] = UI.HStack { height = 40 } end
+    return out
+  end
+  local root = UI.mount(UIParent, UI.Window { title = "Tall", width = 300, height = 248, rows() })
+  local win = find(root, "Window")[1]
+  local sc = win.region.body.fxScroller
+  ok(win.scroll and sc.thumbY:IsShown() and sc.thumbY.track:IsShown(), "scrolls")
+  root:update(UI.Window { title = "Tall", width = 300, height = 248, scroll = false, rows() })
+  ok(not sc.thumbY:IsShown() and not sc.thumbY.track:IsShown(), "vertical scrollbar hidden")
+  ok(not sc.thumbX:IsShown() and not sc.thumbX.track:IsShown(), "horizontal scrollbar hidden")
+  ok(not win.scroll, "the node no longer scrolls")
+  eq(sc.maxY, 0, "no scroll range")
+  root:update(UI.Window { title = "Tall", width = 300, height = 248, rows() })
+  ok(win.scroll and sc.thumbY:IsShown(), "scrolls again")
+  sc.thumbY:_fire("OnEnter")
+  sc.thumbY:_fire("OnMouseDown")
+  root:unmount()
+
+  root = UI.mount(UIParent, UI.Window { title = "Short", width = 300, height = 248, scroll = false, UI.HStack { height = 40 } })
+  win = find(root, "Window")[1]
+  ok(win.region.body.fxScroller == sc, "the pooled window is reused")
+  ok(not sc.thumbY:IsShown() and not sc.thumbY.track:IsShown(), "no scrollbar on the reused window")
+  ok(not sc.thumbY.fxHover and not sc.thumbY.fxDrag, "no hover or drag carried over")
+  root:unmount()
+
+  local host = CreateFrame("Frame")
+  host:SetSize(200, 100)
+  local kids = {}
+  for i = 1, 6 do kids[i] = UI.HStack { height = 30 } end
+  root = UI.mount(host, UI.ScrollView { kids })
+  local view = find(root, "ScrollView")[1]
+  local vsc = view.region.fxScroller
+  ok(vsc.thumbY:IsShown(), "ScrollView scrolls")
+  vsc.thumbY:_fire("OnEnter")
+  vsc.thumbY:_fire("OnMouseDown")
+  root:unmount()
+  ok(not vsc.thumbY:IsShown() and not vsc.thumbY.track:IsShown(), "a released ScrollView keeps no scrollbar")
+  ok(not vsc.thumbY.fxHover and not vsc.thumbY.fxDrag, "nor hover or drag")
+  eq(vsc.maxY, 0, "nor a scroll range")
+end)
+
 ---------------------------------------------------------------------------
 
 for _, t in ipairs(tests) do
