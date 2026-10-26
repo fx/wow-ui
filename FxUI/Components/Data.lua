@@ -109,12 +109,12 @@ local function requestItem(f, id)
   if item:IsItemEmpty() then return end
   item:ContinueOnItemLoad(function()
     if f.fxNode and f.fxItemID == id then
-      local prevTheme = I.enter(f.fxNode)
-      refreshItem(f)
-      I.leave(prevTheme)
       local node = f.fxNode
+      local prevTheme = I.enter(node)
+      refreshItem(f)
       I.setText(f.extra, extraText(f, node.el.props), "body", "muted")
       f.extra:SetShown(f.extra:GetText() ~= "")
+      I.leave(prevTheme)
       I.requestLayout(node.root)
     end
   end)

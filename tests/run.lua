@@ -1389,6 +1389,24 @@ test("scroll: scrollbars go away with scroll = false and on a reused region", fu
   eq(vsc.maxY, 0, "nor a scroll range")
 end)
 
+test("theme: radius tokens and late item styling use the element's theme", function()
+  UI.registerTheme("t-square", "default", { colors = { muted = "#00FF00" }, radius = { r4 = 0, r8 = 0, pill = 0 } })
+  local host = CreateFrame("Frame")
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+  host:SetSize(400, 40)
+  local root = UI.mount(host, UI.HStack { bg = "panel", radius = "r8", UI.ItemCell { item = 4250, qty = 2 } }, { theme = "t-square" })
+  local stack = find(root, "HStack")[1]
+  eq(stack.region.fxBg.fxShape, nil, "r8 is square in a theme whose r8 is 0")
+  local f = find(root, "ItemCell")[1].region
+  W.loadItems()
+  W.nextFrame()
+  eq(f.extra:GetText(), "\195\1512")
+  eq(f.extra._color[2], 1, "extra text styled in the tree's theme after the item loads")
+  eq(f.extra._color[1], 0)
+  root:unmount()
+  W.items[4250] = nil
+end)
+
 ---------------------------------------------------------------------------
 
 for _, t in ipairs(tests) do

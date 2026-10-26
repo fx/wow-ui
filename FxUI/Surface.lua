@@ -14,7 +14,7 @@ function I.setFile(tex, name, wrapH, wrapV)
 end
 
 function I.radiusOf(radius)
-  if type(radius) == "string" then return UI.theme.radius[radius] or 0 end
+  if type(radius) == "string" then return (I.theme().radius or {})[radius] or 0 end
   return radius or 0
 end
 
