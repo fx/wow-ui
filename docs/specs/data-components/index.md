@@ -96,8 +96,8 @@ This spec owns the behaviour of FxUI's data-oriented components: money, item cel
 - Candles MUST draw in the `up` color when they close at or above their open and in `down` otherwise; bars below the baseline MUST draw in `down`, others in `color` (default `gold`).
 - `reference` MUST draw as a dashed horizontal level; `grid` (default on) draws three horizontal gridlines.
 - Unless `axis = false`, a price column on the right MUST show the high and low of the range and a tag at the last value in the series' tone, and MUST be as wide as its widest label (at least 28 px, at most a third of the chart).
-- While the cursor is over the plot, a crosshair MUST snap to the nearest point (line) or the slot under the cursor (bars, candles), show a readout at the top (the point's `labels[i]` and its value formatted by `format(value)`, default short colored money; for candles open, high, low, close and change in percent), and a price tag at the cursor's height. When the readout is wider than the plot it MUST fall back to a shorter form: for candles the label with close and change only, then, for any mode, the value without the label.
-- `onHover(i)` MUST be called with the hovered index, and with `nil` whenever the hover ends: the cursor leaves the plot (into the margin or off the chart), the chart is hidden or released, or its data no longer has a point there. A re-layout alone does not end the hover.
+- While the cursor is over the plot (inside its margins), a crosshair MUST snap to the nearest point (line) or the slot under the cursor (bars, candles), show a readout at the top (the point's `labels[i]` and its value formatted by `format(value)`, default short colored money; for candles open, high, low, close and change in percent), and a price tag at the cursor's height. When the readout is wider than the plot it MUST fall back to a shorter form: for candles the label with close and change only, then, for any mode, the value without the label.
+- `onHover(i)` MUST be called with the hovered index each time the hovered point changes, and with `nil` whenever the hover ends: the cursor leaves the plot (into any of its four margins or off the chart), the chart is hidden or released, or its data no longer has a point there. A re-layout alone does not end the hover, and neither a re-layout nor the cursor moving within the same point calls `onHover` again, so an `onHover` that re-renders the chart does not call itself every frame.
 - An empty series MUST draw nothing.
 
 #### Scenario: Line hover
@@ -111,6 +111,12 @@ This spec owns the behaviour of FxUI's data-oriented components: money, item cel
 - **GIVEN** a candle chart 130 px wide with labels
 - **WHEN** the cursor hovers a candle
 - **THEN** the readout fits inside the plot and shows no OHLC
+
+#### Scenario: Hover that re-renders the consumer
+
+- **GIVEN** a component whose chart's `onHover` sets the component's state
+- **WHEN** the cursor rests on one point for many frames
+- **THEN** `onHover` is called once, the component re-renders a bounded number of times, and the crosshair stays drawn
 
 ### Sparkline
 

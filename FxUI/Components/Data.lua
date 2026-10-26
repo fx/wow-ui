@@ -534,7 +534,6 @@ local function drawHover(f, node, i, y)
   f.readout:SetPoint("TOPLEFT", f, "TOPLEFT", g.left, -2)
 
   f.cross:Show()
-  if p.onHover then p.onHover(i) end
 end
 
 local function hoverUpdate(f)
@@ -549,7 +548,8 @@ local function hoverUpdate(f)
   local left, bottom = f:GetRect()
   if not left then return end
   local x, y = cx / scale - left, cy / scale - bottom
-  if x < g.left or x > g.right then
+  -- Any of the four margins around the plot ends the hover.
+  if x < g.left or x > g.right or y < g.bottom or y > g.top then
     if f.hoverIndex then hideHover(f, node) end
     return
   end
@@ -560,12 +560,17 @@ local function hoverUpdate(f)
     i = math.floor((x - g.left) / g.step + 0.5) + 1
   end
   i = I.clamp(i, 1, g.n)
-  y = I.clamp(y, g.bottom, g.top)
-  if i ~= f.hoverIndex or math.abs(y - (f.hoverY or -1)) >= 1 then
+  -- Redraw when the point or the cursor height changes, or after a re-layout
+  -- (which clears hoverY); tell the consumer only when the point changes, so
+  -- an onHover that re-renders the chart does not call itself every frame.
+  local changed = i ~= f.hoverIndex
+  if changed or not f.hoverY or math.abs(y - f.hoverY) >= 1 then
     f.hoverIndex, f.hoverY = i, y
     local prevTheme = I.enter(node)
     drawHover(f, node, i, y)
     I.leave(prevTheme)
+    local onHover = changed and node.el.props.onHover
+    if onHover then I.safecall(onHover, i) end
   end
 end
 

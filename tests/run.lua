@@ -1488,6 +1488,83 @@ test("chart: onHover(nil) on every path that ends a hover", function()
   W.cursorX, W.cursorY = -100, -100
 end)
 
+test("chart: hover ends in every margin of the plot", function()
+  local host = CreateFrame("Frame")
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+  host:SetSize(300, 150)
+  local values = {}
+  for i = 1, 11 do values[i] = 1000 + i * 100 end
+  local calls = {}
+  local root = UI.mount(host, UI.Chart { values = values, onHover = function(i) calls[#calls + 1] = i == nil and "nil" or i end })
+  local node = find(root, "Chart")[1]
+  local f, g = node.region, node.geo
+  local l, b = f:GetRect()
+  local x = l + g.xs[6]
+  local margins = {
+    { "left", l + g.left - 2, b + 60 },
+    { "right", l + g.right + 2, b + 60 },
+    { "top", x, b + g.top + 2 },
+    { "bottom", x, b + g.bottom - 2 },
+  }
+  for _, m in ipairs(margins) do
+    W.cursorX, W.cursorY = x, b + 60
+    W.nextFrame()
+    ok(f.cross:IsShown(), "hovering before the " .. m[1] .. " margin")
+    eq(calls[#calls], 6, "hovered index before the " .. m[1] .. " margin")
+    W.cursorX, W.cursorY = m[2], m[3]
+    W.nextFrame()
+    ok(not f.cross:IsShown(), "crosshair hidden in the " .. m[1] .. " margin")
+    eq(calls[#calls], "nil", "onHover(nil) in the " .. m[1] .. " margin")
+  end
+  root:unmount()
+  W.cursorX, W.cursorY = -100, -100
+end)
+
+test("chart: onHover fires once per hovered point, even when it re-renders the consumer", function()
+  local host = CreateFrame("Frame")
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+  host:SetSize(300, 200)
+  local values = {}
+  for i = 1, 11 do values[i] = 1000 + i * 100 end
+  local notes, renders = {}, 0
+  local Probe = UI.component("HoverProbe", function(_, ctx)
+    renders = renders + 1
+    return UI.VStack {
+      align = "stretch",
+      UI.Text { text = "hovered " .. tostring(ctx.state.i) },
+      UI.Chart { flex = 1, values = values, onHover = function(i)
+        notes[#notes + 1] = i == nil and "nil" or i
+        ctx:setState({ i = i })
+      end },
+    }
+  end)
+  local root = UI.mount(host, Probe {})
+  local node = find(root, "Chart")[1]
+  local f = node.region
+  local l, b = f:GetRect()
+  W.cursorX, W.cursorY = l + node.geo.xs[6], b + 60
+  local before = renders
+  for _ = 1, 30 do W.nextFrame() end
+  eq(#notes, 1, "one notification for a stationary cursor")
+  eq(notes[1], 6, "the hovered index")
+  ok(renders - before <= 2, "a bounded number of renders: " .. (renders - before))
+  ok(f.cross:IsShown(), "the crosshair is redrawn after the re-layout")
+
+  -- Moving within the same point redraws the price line but does not notify.
+  W.cursorY = b + 40
+  for _ = 1, 5 do W.nextFrame() end
+  eq(#notes, 1, "no notification when only the height changes")
+  W.cursorX = l + node.geo.xs[7]
+  for _ = 1, 5 do W.nextFrame() end
+  eq(#notes, 2, "a new point notifies once")
+  eq(notes[2], 7, "with its index")
+  W.cursorX, W.cursorY = -100, -100
+  for _ = 1, 5 do W.nextFrame() end
+  eq(#notes, 3, "ending the hover notifies once")
+  eq(notes[3], "nil", "with nil")
+  root:unmount()
+end)
+
 ---------------------------------------------------------------------------
 
 for _, t in ipairs(tests) do
