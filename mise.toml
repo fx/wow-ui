@@ -1,0 +1,33 @@
+# Development tools: `mise install` sets up Lua 5.1 (the client's Lua) for
+# the tests, and Python with fontTools for the media generators.
+[tools]
+lua = "5.1.5"
+python = "3.13"
+uv = "0.13.5"
+
+[env]
+_.python.venv = { path = ".venv", create = true }
+
+[hooks]
+postinstall = "uv pip install --quiet -r tools/requirements.txt"
+
+[tasks.test]
+description = "Headless tests against the client stub"
+run = "lua tests/run.lua"
+
+[tasks.coverage]
+description = "Tests under luacov; fails below 80% line coverage (needs luarocks install luacov)"
+run = [
+  "rm -f luacov.stats.out luacov.report.out",
+  "lua -lluacov tests/run.lua",
+  "lua -e 'require(\"luacov.reporter\").report()'",
+  "lua tests/coverage.lua",
+]
+
+[tasks.fonts]
+description = "Generate fonts: mise run fonts <google-fonts-download-dir>"
+run = "python tools/build-fonts.py {{arg(name=\"source\")}} FxUI/Media/Fonts"
+
+[tasks.textures]
+description = "Generate the rounded-rectangle textures"
+run = "python tools/build-textures.py FxUI/Media/Textures"

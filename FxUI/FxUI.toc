@@ -1,0 +1,26 @@
+## Interface: 120105
+## Title: FxUI
+## Notes: Declarative UI component library.
+## Author: fx
+## Version: 0.1.0
+## Category: Libraries
+## SavedVariables: FxUIDB
+
+Libs\LibStub\LibStub.lua
+
+Core.lua
+Themes\Default.lua
+Theme.lua
+Format.lua
+Render.lua
+Surface.lua
+Commands.lua
+Scale.lua
+
+Components\Layout.lua
+Components\Controls.lua
+Components\Data.lua
+Components\List.lua
+Components\Table.lua
+Components\Window.lua
+Components\Toast.lua
