@@ -1,0 +1,11 @@
+## Interface: 120105
+## Title: FxUI Dev
+## Notes: FxUI developer tools: component demo (/fx demo) and live UI export for offline inspection (/fx dev).
+## Author: fx
+## Version: 0.1.0
+## Dependencies: FxUI
+## SavedVariables: FxUIDevDB
+## SavedVariablesPerCharacter: FxUIDevCharDB
+
+Demo.lua
+Dev.lua
