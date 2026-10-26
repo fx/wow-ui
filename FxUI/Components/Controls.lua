@@ -5,16 +5,140 @@ local I = UI._internal
 
 local WHITE, BLACK = "#FFFFFF", "#000000"
 
-local function showTooltip(frame, text)
-  if not text or text == "" then return end
-  GameTooltip:SetOwner(frame, "ANCHOR_TOP")
-  GameTooltip:SetText(text, 1, 1, 1, 1, true)
-  GameTooltip:Show()
+---------------------------------------------------------------------------
+-- Tooltip
+---------------------------------------------------------------------------
+
+local TOOLTIP_MAX_W, TOOLTIP_GAP = 260, 6
+
+local TooltipView = I.defineComponent("FxTooltip", function(props)
+  local body = { gap = 4, padding = { 8, 10 }, surface = "tooltip", maxWidth = props.maxWidth or TOOLTIP_MAX_W }
+  if props.title and props.title ~= "" then
+    body[#body + 1] = UI.Text { text = props.title, style = "strong", wrap = true }
+  end
+  if props.text and props.text ~= "" then
+    body[#body + 1] = UI.Text { text = props.text, color = props.title and "muted" or "text", wrap = true }
+  end
+  return UI.VStack(body)
+end)
+
+-- One tooltip for every copy of the library: an upgrade keeps it.
+I.tooltip = I.tooltip or {}
+local TT = I.tooltip
+
+-- Show FxUI's tooltip for `owner`: `spec` is text, or { title, text,
+-- maxWidth }. It sits above the owner, or below when there is no room
+-- above, sized to its content, in the active theme's `tooltip` surface.
+function UI.showTooltip(owner, spec)
+  if type(spec) ~= "table" then spec = { text = spec } end
+  if (not spec.title or spec.title == "") and (not spec.text or spec.text == "") then return end
+  if not TT.host then
+    local host = CreateFrame("Frame", nil, UIParent)
+    host:SetFrameStrata("TOOLTIP")
+    host:SetClampedToScreen(true)
+    I.followScale(host, false)
+    TT.host = host
+    TT.root = UI.mount(host, TooltipView(spec))
+  else
+    TT.root:update(TooltipView(spec))
+  end
+  local host = TT.host
+  local w, h = I.measure(TT.root.node, spec.maxWidth or TOOLTIP_MAX_W, 2000)
+  host:SetSize(w, h)
+  TT.root:layout()
+  host:ClearAllPoints()
+  -- Below the owner when the tooltip would not fit above it.
+  local top = owner:GetTop()
+  local room = top and UIParent:GetTop() and (UIParent:GetTop() * UIParent:GetEffectiveScale() - top * owner:GetEffectiveScale())
+  if room and room < (h + TOOLTIP_GAP) * host:GetEffectiveScale() then
+    host:SetPoint("TOP", owner, "BOTTOM", 0, -TOOLTIP_GAP)
+  else
+    host:SetPoint("BOTTOM", owner, "TOP", 0, TOOLTIP_GAP)
+  end
+  host:Show()
+  TT.owner = owner
 end
 
-local function hideTooltip(frame)
-  if GameTooltip:IsOwned(frame) then GameTooltip:Hide() end
+-- Hide the tooltip when `owner` shows it (any owner when nil).
+function UI.hideTooltip(owner)
+  if TT.host and (owner == nil or TT.owner == owner) then
+    TT.host:Hide()
+    TT.owner = nil
+  end
 end
+
+-- The frame the tooltip is shown for, or nil while it is hidden.
+function UI.tooltipOwner()
+  return TT.host and TT.host:IsShown() and TT.owner or nil
+end
+
+local function showTooltip(frame, text) UI.showTooltip(frame, text) end
+local function hideTooltip(frame) UI.hideTooltip(frame) end
+
+---------------------------------------------------------------------------
+-- Help: a small "?" that explains something in a tooltip
+---------------------------------------------------------------------------
+
+local HELP_SIZE = 14
+
+-- Skin contract: skins.Help.paint(frame, props, state) with state =
+-- { hover }; frame.circle and .mark exist. metrics.Help.size (14).
+local function paintHelp(f)
+  local node = f.fxNode
+  if not node then return end
+  local prevTheme = I.enter(node)
+  local skin = I.skin("Help")
+  if skin and skin.paint then
+    skin.paint(f, node.el.props, { hover = f.fxHover })
+  else
+    I.clearSkin(f)
+    f.circle:Show()
+    f.mark:Show()
+    f.circle:SetVertexColor(I.rgba(f.fxHover and "muted" or "line"))
+    f.mark:SetTextColor(I.rgba(f.fxHover and "text" or "muted"))
+  end
+  I.leave(prevTheme)
+end
+
+-- Props: text, title, maxWidth (the tooltip's); size.
+I.defineHost("Help", {
+  create = function(holder)
+    local f = CreateFrame("Frame", nil, holder)
+    f:EnableMouse(true)
+    f.circle = f:CreateTexture(nil, "ARTWORK")
+    f.circle:SetAllPoints()
+    I.setFile(f.circle, "Circle.tga")
+    f.mark = f:CreateFontString(nil, "OVERLAY")
+    f.mark:SetPoint("CENTER", 0, 0)
+    f:SetScript("OnEnter", function(self)
+      self.fxHover = true
+      paintHelp(self)
+      local node = self.fxNode
+      if node then
+        local p = node.el.props
+        UI.showTooltip(self, { title = p.title, text = p.text, maxWidth = p.maxWidth })
+      end
+    end)
+    f:SetScript("OnLeave", function(self)
+      self.fxHover = false
+      paintHelp(self)
+      UI.hideTooltip(self)
+    end)
+    return f
+  end,
+  update = function(node)
+    I.setText(node.region.mark, "?", "label", "muted")
+    paintHelp(node.region)
+  end,
+  measure = function(node)
+    local s = node.el.props.size or I.metrics("Help").size or HELP_SIZE
+    return s, s
+  end,
+  release = function(node)
+    node.region.fxHover = false
+    UI.hideTooltip(node.region)
+  end,
+})
 
 ---------------------------------------------------------------------------
 -- Button

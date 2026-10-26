@@ -711,6 +711,7 @@ test("themes: a skinned theme draws every component; pooled regions are clean af
       Badge = { paint = mark("Badge") },
       Toggle = { paint = mark("Toggle") },
       Slider = { paint = mark("Slider") },
+      Help = { paint = mark("Help") },
       Tab = { paint = mark("Tab"), paintRail = mark("TabRail"), railGap = function(b) return b:GetLeft(), b:GetRight() end },
       ItemCell = { paintIcon = mark("ItemCell") },
       Meter = { paint = mark("Meter") },
@@ -727,6 +728,7 @@ test("themes: a skinned theme draws every component; pooled regions are clean af
     return UI.Window { title = "Skinned", width = 500, height = 600, theme = theme, status = "s", footer = { UI.Text { text = "f" } },
       UI.HStack { gap = 4, UI.Button { text = "Go" }, UI.Badge { text = "B" }, UI.Toggle { label = "On", checked = true } },
       UI.Slider { label = "Level", min = 0, max = 10, value = 3 },
+      UI.Help { text = "Explains" },
       UI.TabBar { tabs = { { id = "x", text = "One" }, { id = "y", text = "Two" } }, selected = "x" },
       UI.ItemCell { item = 17 },
       UI.Meter { value = 5, max = 10, label = "Fill", valueText = "5/10" },
@@ -737,7 +739,7 @@ test("themes: a skinned theme draws every component; pooled regions are clean af
     }
   end
   local root = UI.mount(UIParent, view("t-skin"))
-  for _, name in ipairs({ "Button", "Badge", "Toggle", "Slider", "Tab", "TabRail", "ItemCell", "Meter", "Chart", "List", "HeaderCell", "Scroll", "Window", "WindowClose", "WindowFooter" }) do
+  for _, name in ipairs({ "Button", "Badge", "Toggle", "Slider", "Help", "Tab", "TabRail", "ItemCell", "Meter", "Chart", "List", "HeaderCell", "Scroll", "Window", "WindowClose", "WindowFooter" }) do
     ok(painted[name], name .. " painted by the skin")
   end
   local card = find(root, "VStack", function(n) return n.el.props.surface == "card" end)[1].region
@@ -754,6 +756,8 @@ test("themes: a skinned theme draws every component; pooled regions are clean af
   ok(button.fxBg and button.fxBg:IsShown(), "default background back")
   local toggle = find(root, "Toggle")[1].region
   ok(not toggle.fxSkinTex.Toggle:IsShown() and toggle.track:IsShown(), "default toggle track back")
+  local help = find(root, "Help")[1].region
+  ok(not help.fxSkinTex.Help:IsShown() and help.circle:IsShown() and help.mark:IsShown(), "default help back")
   local slider = find(root, "Slider")[1].region
   ok(not slider.fxSkinTex.Slider:IsShown() and slider.track:IsShown() and slider.knob:IsShown(), "default slider track back")
   card = find(root, "VStack", function(n) return n.el.props.surface == "card" end)[1].region
@@ -943,7 +947,7 @@ test("slider: stops, press and drag, wheel, value text room, disabled", function
   local scale = f:GetEffectiveScale()
   W.cursorX, W.cursorY = (left - 20) * scale, 0
   f:_fire("OnEnter")
-  ok(GameTooltip:IsOwned(f), "its tooltip")
+  ok(UI.tooltipOwner() == f, "its tooltip")
   f:_fire("OnMouseDown", "LeftButton")
   UI.flush()
   eq(changes[#changes], 0, "pressed at the start")
@@ -961,7 +965,7 @@ test("slider: stops, press and drag, wheel, value text room, disabled", function
   f:_fire("OnMouseUp")
   eq(f:GetScript("OnUpdate"), nil, "drag ends on release")
   f:_fire("OnLeave")
-  ok(not GameTooltip:IsOwned(f), "tooltip hidden")
+  ok(UI.tooltipOwner() ~= f, "tooltip hidden")
   eq(f.valueText:GetWidth(), wide, "the value's room does not change")
   -- The wheel steps one stop, and stops at the ends.
   f:_fire("OnMouseWheel", 1)
@@ -1009,6 +1013,63 @@ test("slider: stops, press and drag, wheel, value text room, disabled", function
   W.cursorX, W.cursorY = -100, -100
 end)
 
+test("tooltip and help: themed, sized to content, above or below its owner, one owner at a time", function()
+  local host = CreateFrame("Frame", nil, UIParent)
+  host:SetSize(400, 100)
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 100, -300)
+  local root = UI.mount(host, UI.HStack { gap = 8,
+    UI.Help { title = "Marks", text = "A: from Auctionator. ~: another realm, a suggestion only." },
+    UI.Help { text = "Short" },
+    UI.Help { size = 18 },
+  })
+  UI.flush()
+  local helps = find(root, "Help")
+  local f = helps[1].region
+  eq(helps[1].w, 14, "a small icon")
+  eq(helps[3].w, 18, "or the size asked for")
+  eq(f.mark:GetText(), "?")
+  f:_fire("OnEnter")
+  eq(UI.tooltipOwner(), f, "its tooltip")
+  local tip = I.tooltip
+  local texts = find(tip.root, "Text")
+  eq(texts[1].el.props.text, "Marks", "the title")
+  eq(texts[1].el.props.style, "strong")
+  eq(texts[2].el.props.color, "muted", "the text under a title")
+  eq(find(tip.root, "VStack")[1].el.props.surface, "tooltip", "the theme's tooltip surface")
+  local w, h = tip.host:GetSize()
+  ok(w > 0 and w <= 260 and h > 0, "sized to its content, at most 260 wide: " .. w .. "x" .. h)
+  local at = tip.host._points[1]
+  eq(at[2], f)
+  eq(at[3], "TOP", "above its owner")
+  -- Another owner takes it; the first leaving does not hide it.
+  local g = helps[2].region
+  g:_fire("OnEnter")
+  eq(UI.tooltipOwner(), g)
+  eq(find(tip.root, "Text")[1].el.props.color, "text", "text alone")
+  f:_fire("OnLeave")
+  eq(UI.tooltipOwner(), g, "only its owner hides it")
+  g:_fire("OnLeave")
+  eq(UI.tooltipOwner(), nil)
+  -- Nothing to say: nothing shown.
+  helps[3].region:_fire("OnEnter")
+  eq(UI.tooltipOwner(), nil)
+  helps[3].region:_fire("OnLeave")
+  -- No room above: below.
+  host:ClearAllPoints()
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 100, 0)
+  UI.flush()
+  root:layout()
+  f:_fire("OnEnter")
+  eq(tip.host._points[1][3], "BOTTOM", "below its owner")
+  -- Unmounting the owner hides it.
+  root:unmount()
+  eq(UI.tooltipOwner(), nil)
+  UI.showTooltip(host, "plain text")
+  eq(UI.tooltipOwner(), host)
+  UI.hideTooltip()
+  eq(UI.tooltipOwner(), nil, "hidden for any owner")
+end)
+
 test("controls: button variants, hover and press, busy, tooltip; badges; toggles", function()
   local host = CreateFrame("Frame")
   host:SetSize(600, 100)
@@ -1038,9 +1099,9 @@ test("controls: button variants, hover and press, busy, tooltip; badges; toggles
     ok(not b.fxHover, "hover cleared")
   end
   buttons[1].region:_fire("OnEnter")
-  ok(GameTooltip:IsOwned(buttons[1].region), "tooltip on hover")
+  ok(UI.tooltipOwner() == buttons[1].region, "tooltip on hover")
   buttons[1].region:_fire("OnLeave")
-  ok(not GameTooltip:IsOwned(buttons[1].region), "tooltip hidden")
+  ok(UI.tooltipOwner() ~= buttons[1].region, "tooltip hidden")
   buttons[1].region:_click()
   eq(clicks, 1, "primary click")
   eq(buttons[2].h, 40, "large")

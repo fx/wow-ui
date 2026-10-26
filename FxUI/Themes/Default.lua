@@ -48,6 +48,7 @@ UI.themes.default = {
   surfaces = {
     card = { bg = "ground", border = "line", radius = "r8" },
     toast = { bg = "raised", border = "#3B4047", radius = "r8" },
+    tooltip = { bg = "raised", border = "#3B4047", radius = "r4" },
     inset = { bg = "panel", border = "line", radius = "r4" },
     plain = {},
   },

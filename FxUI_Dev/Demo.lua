@@ -163,6 +163,13 @@ local ControlsPage = UI.component("DemoControls", {
           UI.Toggle { label = "Extra tooltip lines on items", checked = s.extras, onChange = function(v) ctx:setState({ extras = v }) end },
           UI.Toggle { label = "Disabled toggle", checked = true, disabled = true },
         }),
+        Card("Help", {
+          Row { gap = 8,
+            UI.Text { text = "Hover the marks", color = "muted" },
+            UI.Help { title = "Help icons", text = "A small ? that explains something in FxUI's own tooltip, instead of a line of text." },
+            UI.Help { text = "Text alone, without a title." },
+          },
+        }),
         Card("Sliders", {
           UI.Slider { label = "At least", values = { 0, 10000, 50000, 100000, 500000, 1000000, 5000000 }, value = s.minPrice,
             format = function(v) return UI.formatMoney(v, { short = true }) end,

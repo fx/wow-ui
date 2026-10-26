@@ -579,10 +579,11 @@ UI.registerTheme({
     small = { path = FRIZ, size = 10, shadow = true },
     monoSmall = { path = ARIAL, size = 11, shadow = true },
   },
-  -- Without the tooltip art, cards, toasts and insets keep FxUI's own.
+  -- Without the tooltip art, cards, toasts, tooltips and insets keep FxUI's own.
   surfaces = backdropShips(TOOLTIP) and {
     card = { backdrop = TOOLTIP, bgColor = "#000000B3", borderColor = "#B0B0B0" },
     toast = { backdrop = TOOLTIP, bgColor = "#000000E6", borderColor = "#B0B0B0" },
+    tooltip = { backdrop = TOOLTIP, bgColor = "#000000E6", borderColor = "#B0B0B0" },
     inset = { backdrop = THIN, bgColor = "#00000080", borderColor = "#808080" },
   } or nil,
   money = "icons",
