@@ -3910,6 +3910,33 @@ test("dev: /fx dev picker highlights, walks up with the wheel, exports the selec
   fx("demo")
 end)
 
+test("dev: the picker takes the innermost element when mounted trees overlap", function()
+  -- Empty full-screen trees (an empty toast stack, an overlay) over a window
+  -- must not hide the window's elements, whichever tree is visited first.
+  local overlays = {}
+  for i = 1, 8 do
+    local host = CreateFrame("Frame", nil, UIParent)
+    host:SetAllPoints(UIParent)
+    overlays[i] = UI.mount(host, UI.VStack {})
+  end
+  local root = UI.mount(UIParent, UI.Window { title = "Under", width = 300, height = 200,
+    UI.HStack { padding = 10, UI.Button { text = "Target" } } })
+  W.nextFrame()
+  local button = find(root, "Button", function(n) return n.el.props.text == "Target" end)[1]
+  local l, b, w, h = button.region:GetRect()
+  W.cursorX, W.cursorY = l + w / 2, b + h / 2
+  fx("dev pick")
+  W.nextFrame()
+  local picker = pickerFrame()
+  eq(picker.selected, button, "innermost element: " .. picker.label:GetText())
+  picker:_fire("OnMouseWheel", 1)
+  W.nextFrame()
+  eq(picker.selected, button.parent, "the wheel walks up the window's own chain")
+  picker:_fire("OnKeyDown", "ESCAPE")
+  root:unmount()
+  for _, o in ipairs(overlays) do o:unmount() end
+end)
+
 test("dev: /fx dev opens the dev window with capture and demo controls", function()
   fx("dev")
   W.nextFrame()

@@ -335,7 +335,6 @@ end
 local picker
 local GOLD = { 0.886, 0.69, 0.29 }
 
--- Host nodes under the cursor, outermost first, from every mounted tree.
 -- A region's rect in UIParent units. Regions report rects in their own
 -- scale, which differs from UIParent's inside FxUI-scaled windows.
 local function uiRect(region)
@@ -345,8 +344,12 @@ local function uiRect(region)
   return l * k, b * k, w * k, h * k
 end
 
+-- Host nodes under the cursor, outermost first: one chain of nested hits
+-- per mounted tree, and the deepest chain wins, so an empty tree lying over
+-- another (a toast stack, an overlay) does not hide the elements under it,
+-- whichever tree is visited first.
 local function nodesAt(x, y)
-  local hits = {}
+  local hits
   local function visit(node)
     if not node.alive then return end
     if node.host and node.region and node.region:IsVisible() then
@@ -360,20 +363,25 @@ local function nodesAt(x, y)
       for _, c in ipairs(list) do visit(c) end
     end
   end
+  local best = {}
   for root in pairs(I.roots) do
-    if root.node and root.frame ~= picker then visit(root.node) end
-  end
-  -- Keep only one chain: each hit must sit inside the previous one.
-  local chain = {}
-  for _, n in ipairs(hits) do
-    local p, inside = n.parent, #chain == 0
-    while p and not inside do
-      if p == chain[#chain] then inside = true end
-      p = p.parent
+    if root.node and root.frame ~= picker then
+      hits = {}
+      visit(root.node)
+      -- Keep only one chain: each hit must sit inside the previous one.
+      local chain = {}
+      for _, n in ipairs(hits) do
+        local p, inside = n.parent, #chain == 0
+        while p and not inside do
+          if p == chain[#chain] then inside = true end
+          p = p.parent
+        end
+        if inside then chain[#chain + 1] = n end
+      end
+      if #chain > #best then best = chain end
     end
-    if inside then chain[#chain + 1] = n end
   end
-  return chain
+  return best
 end
 
 local function nodeLabel(node)
