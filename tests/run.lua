@@ -1966,6 +1966,270 @@ test("layout: width props bound content before it is measured", function()
   root:unmount()
 end)
 
+test("layout: invariants hold over representative trees at several sizes", function()
+  local EPS = 0.001
+  local long = string.rep("word ", 12)
+  local function chips(n, w, h)
+    local out = {}
+    for i = 1, n do out[i] = UI.HStack { width = w or (40 + (i % 3) * 15), height = h or (16 + (i % 2) * 8) } end
+    return out
+  end
+  local Card = UI.component("TestInvariantCard", function(props)
+    return UI.VStack { width = 300, gap = 4, padding = 4, UI.Text { text = props.text, wrap = true }, UI.HStack { wrap = true, gap = 4, chips(3, 90, 20) } }
+  end)
+  local Row = UI.component("TestInvariantRow", function()
+    return UI.HStack { width = 300, wrap = true, gap = 0, chips(3, 90, 20) }
+  end)
+  local Label = UI.component("TestInvariantLabel", function(props)
+    return UI.Text { text = props.text, wrap = true, maxWidth = 400 }
+  end)
+
+  -- Each tree fills a host frame (or, for a window, is the window).
+  local cases = {
+    { name = "column, align start, padding and gaps", el = function() return UI.VStack { align = "start", padding = { 6, 8 }, gap = 4,
+      UI.Text { text = "Title", style = "title" }, UI.Text { text = long, wrap = true }, UI.Button { text = "Go" },
+      UI.HStack { width = 40, height = 10 }, UI.Spacer { size = 6 }, UI.Divider {} } end },
+    { name = "column, align center, flex and minima", el = function() return UI.VStack { align = "center", gap = 6,
+      UI.HStack { height = 20, UI.Text { text = "Head" } }, UI.HStack { flex = 1, minHeight = 30 }, UI.Text { text = long, wrap = true },
+      UI.VStack { flex = 2, minHeight = 10, UI.Text { text = "in a flexible column" } }, UI.Button { text = "Done" } } end },
+    { name = "column, align end, justify center", el = function() return UI.VStack { align = "end", justify = "center", gap = 3,
+      UI.Text { text = long, wrap = true }, UI.Badge { text = "new" }, UI.Dot { size = 10 } } end },
+    { name = "column, align stretch, justify between", el = function() return UI.VStack { justify = "between", padding = 5,
+      UI.Text { text = long, wrap = true }, UI.HStack { height = 12 }, UI.Button { text = "Wide" } } end },
+    { name = "row, justify between, padding", el = function() return UI.HStack { justify = "between", padding = { 4, 6 }, gap = 8,
+      UI.Button { text = "One" }, UI.Text { text = "Two" }, UI.Dot {} } end },
+    { name = "row, justify end, align end", el = function() return UI.HStack { justify = "end", align = "end", gap = 8,
+      UI.Text { text = "Label" }, UI.HStack { width = 30, height = 30 }, UI.Button { text = "Act" } } end },
+    { name = "row, flex minima beside fixed children", el = function() return UI.HStack { gap = 6, align = "start",
+      UI.HStack { flex = 2, minWidth = 40, height = 12 }, UI.VStack { flex = 1, minWidth = 30, UI.Text { text = long, wrap = true } },
+      UI.Button { text = "Fixed" } } end },
+    { name = "row, align stretch with a spacer", el = function() return UI.HStack { align = "stretch", gap = 4,
+      UI.Text { text = "Left" }, UI.Spacer {}, UI.Button { text = "Right" } } end },
+    { name = "wrapping row, justify center, align end", el = function() return UI.VStack { align = "start",
+      UI.HStack { wrap = true, gap = 6, rowGap = 4, justify = "center", align = "end", padding = 3, chips(7), UI.Text { text = "tail" } } } end },
+    { name = "wrapping row, align stretch, justify between", el = function() return UI.VStack {
+      UI.HStack { wrap = true, gap = 5, align = "stretch", justify = "between", chips(9) } } end },
+    { name = "wrapping text with width, maxWidth and minWidth", el = function() return UI.VStack { align = "start", gap = 2,
+      UI.Text { text = long, wrap = true, width = 120 }, UI.Text { text = long, wrap = true, maxWidth = 150 },
+      UI.Text { text = "short", wrap = true, minWidth = 90 }, UI.Text { text = long, wrap = true, maxWidth = 90, minWidth = 60 } } end },
+    { name = "wrapping text with maxWidth, centred", el = function() return UI.VStack { align = "center",
+      UI.Text { text = long, wrap = true, maxWidth = 150 }, UI.HStack { height = 10, width = 10 } } end },
+    { name = "components with width props over containers", el = function() return UI.VStack { align = "start", gap = 4,
+      Row { width = 100 }, Card { text = long, width = 160 }, Card { text = "short" }, Label { text = long, maxWidth = 120 } } end },
+    -- In a stretching column, so the row is placed at the width it is
+    -- measured at (a start-aligned column places a row with a flexible child
+    -- at its minimum width, by design). The flexible card's share wins over
+    -- the width its render gives.
+    { name = "component flexing beside a fixed component", el = function() return UI.VStack {
+      UI.HStack { gap = 4, align = "start", Row { width = 100 }, Card { text = long, flex = 1 } } } end },
+    { name = "scroll view, vertical", el = function() return UI.ScrollView { gap = 4, padding = 4,
+      UI.Text { text = long, wrap = true }, UI.HStack { height = 120 }, UI.HStack { wrap = true, gap = 4, chips(6) }, UI.HStack { flex = 1, minHeight = 20 } } end },
+    { name = "scroll view, horizontal", el = function() return UI.ScrollView { direction = "horizontal", gap = 10,
+      chips(8, 50, 20), UI.Text { text = long, wrap = true } } end },
+    { name = "scroll view, both", el = function() return UI.ScrollView { direction = "both",
+      UI.VStack { gap = 2, UI.HStack { width = 360, height = 90 }, UI.HStack { width = 200, height = 90 } }, UI.Text { text = long, wrap = true } } end },
+    { name = "window body", window = true, el = function(w, h) return UI.Window { title = "Invariants", width = w, height = h, gap = 6, padding = 8,
+      UI.Text { text = long, wrap = true }, UI.HStack { gap = 4, UI.Button { text = "A" }, UI.Spacer {}, UI.Button { text = "B" } },
+      UI.HStack { wrap = true, gap = 4, chips(6) }, UI.VStack { flex = 1, minHeight = 20 } } end },
+    { name = "window body without scrolling", window = true, el = function(w, h) return UI.Window { title = "Fixed", width = w, height = h, scroll = false, gap = 4,
+      Card { text = long, width = 200 }, UI.Text { text = long, wrap = true, maxWidth = 180 }, UI.VStack { flex = 1 } } end },
+  }
+  local sizes = { { 100, 900 }, { 240, 500 }, { 380, 260 }, { 520, 640 }, { 800, 120 } }
+
+  local origMeasure = I.measure
+  local function hostOf(node)
+    while node and node.def do node = node.child end
+    return node
+  end
+  local function hosts(root)
+    local out = {}
+    walk(root.node, function(n) if n.host then out[#out + 1] = n end end)
+    return out
+  end
+  local function r(v) return v and string.format("%.3f", v) or "-" end
+  local function snapshot(root)
+    local out = {}
+    for _, n in ipairs(hosts(root)) do
+      local s = n.host.name .. " " .. r(n.x) .. "," .. r(n.y) .. " " .. r(n.w) .. "x" .. r(n.h)
+      if n.region and n.region.GetSize then
+        local rw, rh = n.region:GetSize()
+        s = s .. " region " .. r(rw) .. "x" .. r(rh)
+      end
+      local sc = n.region and (n.region.fxScroller or (n.region.body and n.region.body.fxScroller))
+      if sc then
+        s = s .. " scroll " .. table.concat({ r(sc.offsetX), r(sc.offsetY), r(sc.maxX), r(sc.maxY), r(sc.contentW), r(sc.contentH), r(sc.viewW), r(sc.viewH) }, ",")
+      end
+      out[#out + 1] = s
+    end
+    return out
+  end
+  local violations = {}
+  local function report(case, size, what)
+    violations[#violations + 1] = case.name .. " @" .. size[1] .. "x" .. size[2] .. ": " .. what
+  end
+  local function same(case, size, label, a, b)
+    if #a ~= #b then return report(case, size, label .. ": " .. #a .. " nodes vs " .. #b) end
+    for i = 1, #a do
+      if a[i] ~= b[i] then return report(case, size, label .. ": node " .. i .. ": " .. a[i] .. " vs " .. b[i]) end
+    end
+  end
+
+  local function mount(case, size, frame)
+    if case.window then return UI.mount(frame, case.el(size[1], size[2])) end
+    frame:SetSize(size[1], size[2])
+    return UI.mount(frame, case.el())
+  end
+  local function resize(case, root, frame, size)
+    if case.window then
+      root.node.region:SetSize(size[1], size[2])
+    else
+      frame:SetSize(size[1], size[2])
+    end
+    UI.flush()
+  end
+  -- Lay out with no pooled regions, so nothing a region kept can matter.
+  local function fresh(case, size)
+    local saved = I.pools
+    I.pools = {}
+    local frame = CreateFrame("Frame")
+    local root = mount(case, size, frame)
+    local snap = snapshot(root)
+    root:unmount()
+    I.pools = saved
+    return snap
+  end
+
+  -- How a stack-like parent lays out a child: main axis, whether the child
+  -- flexes or stretches, and the box children must stay in.
+  local function arrangement(parent, top)
+    local p, name = parent.el.props, parent.host.name
+    if name == "HStack" then
+      return { horizontal = true, wrap = p.wrap, align = p.align or "center", boxW = parent.w, boxH = parent.h }
+    elseif name == "VStack" then
+      return { horizontal = false, align = p.align or "stretch", boxW = parent.w, boxH = parent.h }
+    elseif name == "ScrollView" then
+      local dir = p.direction or "vertical"
+      local sc = parent.region.fxScroller
+      return { horizontal = dir == "horizontal", align = p.align or (dir == "vertical" and "stretch" or "start"), boxW = sc.contentW, boxH = sc.contentH }
+    elseif name == "Window" then
+      for _, c in ipairs(parent.children or {}) do
+        if c == top then
+          local sc = parent.region.body.fxScroller
+          return { horizontal = false, align = "stretch", boxW = sc.contentW, boxH = sc.contentH }
+        end
+      end
+    end
+  end
+
+  local function checkPlacement(case, size, root)
+    for _, n in ipairs(hosts(root)) do
+      local top, parent = n, n.parent
+      while parent and parent.def do top, parent = parent, parent.parent end
+      local how = parent and arrangement(parent, top)
+      if how and n.host.name ~= "Spacer" then
+        local label = n.host.name .. (n.el.props.text and (" '" .. n.el.props.text:sub(1, 12) .. "'") or "")
+        -- Inside the parent's box (a scrolling parent's box is its content).
+        if n.x < -EPS or n.y < -EPS or n.x + n.w > how.boxW + EPS or n.y + n.h > how.boxH + EPS then
+          report(case, size, label .. " at " .. r(n.x) .. "," .. r(n.y) .. " " .. r(n.w) .. "x" .. r(n.h)
+            .. " outside its parent's " .. r(how.boxW) .. "x" .. r(how.boxH))
+        end
+        -- A leaf's content fits the box it got: measured at that box, it
+        -- needs no more.
+        if not n.host.container then
+          local mw, mh = origMeasure(n, n.w, n.h)
+          if mw > n.w + EPS or mh > n.h + EPS then
+            report(case, size, label .. " needs " .. r(mw) .. "x" .. r(mh) .. " in its " .. r(n.w) .. "x" .. r(n.h) .. " box")
+          end
+        end
+        local seen = n.fxSeen
+        if not seen then
+          report(case, size, label .. " was placed without being measured")
+        else
+          local flex = (not how.wrap) and (I.layoutProp(top, "flex") or 0) > 0
+          local stretch = (I.layoutProp(top, "alignSelf") or how.align) == "stretch"
+          local mainPlaced, crossPlaced = n.w, n.h
+          local mainSeen, crossSeen = seen.w, seen.h
+          if not how.horizontal then
+            mainPlaced, crossPlaced, mainSeen, crossSeen = n.h, n.w, seen.h, seen.w
+          end
+          -- A flexible child is placed at its share, not its measured main
+          -- size (stacks report it at its minimum by design); a stretched
+          -- child fills the cross axis whatever it measured.
+          if not flex and math.abs(mainPlaced - mainSeen) > EPS then
+            report(case, size, label .. " measured " .. r(mainSeen) .. " but placed at " .. r(mainPlaced) .. " along the main axis")
+          end
+          if not stretch and math.abs(crossPlaced - crossSeen) > EPS then
+            report(case, size, label .. " measured " .. r(crossSeen) .. " but placed at " .. r(crossPlaced) .. " across")
+          end
+        end
+      end
+    end
+  end
+
+  I.measure = function(node, maxW, maxH, exact)
+    local w, h = origMeasure(node, maxW, maxH, exact)
+    local n = hostOf(node)
+    if n then n.fxSeen = { w = w, h = h } end
+    return w, h
+  end
+  local passed, err = pcall(function()
+    for _, case in ipairs(cases) do
+      local checked = 0
+      for i, size in ipairs(sizes) do
+        local want = fresh(case, size)
+        local frame = CreateFrame("Frame")
+        local root = mount(case, size, frame)
+        same(case, size, "fresh mount vs mount without pooled regions", snapshot(root), want)
+
+        -- Idempotence: a second layout moves and resizes nothing.
+        local before = snapshot(root)
+        local fits = true
+        if not case.window then
+          local mw, mh = origMeasure(root.node, size[1], size[2])
+          fits = mw <= size[1] + EPS and mh <= size[2] + EPS
+        elseif root.node.el.props.scroll == false then
+          local p, sc = root.node.el.props, root.node.region.body.fxScroller
+          local mw, mh = I.stackMeasure(root.node.children, { gap = p.gap, padding = p.padding }, false, sc.contentW, nil)
+          fits = mw <= sc.contentW + EPS and mh <= sc.contentH + EPS
+        end
+        root:layout()
+        same(case, size, "second layout", snapshot(root), before)
+        -- Measure = place, and children inside their parents, wherever the
+        -- tree fits its frame (content too big for a box that does not
+        -- scroll overflows by design).
+        if fits then
+          checked = checked + 1
+          checkPlacement(case, size, root)
+        end
+
+        -- Resize independence: from every other size to this one.
+        for j, from in ipairs(sizes) do
+          if j ~= i then
+            resize(case, root, frame, from)
+            resize(case, root, frame, size)
+            same(case, size, "resized from " .. from[1] .. "x" .. from[2], snapshot(root), want)
+          end
+        end
+        root:unmount()
+
+        -- A pooled region reused at this size: lay out at another size,
+        -- release, and mount again here.
+        local other = sizes[i % #sizes + 1]
+        local f2 = CreateFrame("Frame")
+        local r2 = mount(case, other, f2)
+        r2:unmount()
+        r2 = mount(case, size, f2)
+        same(case, size, "pooled from " .. other[1] .. "x" .. other[2], snapshot(r2), want)
+        r2:unmount()
+      end
+      if checked == 0 then violations[#violations + 1] = case.name .. ": fits no size, so placement went unchecked" end
+    end
+  end)
+  I.measure = origMeasure
+  if not passed then error(err, 0) end
+  if #violations > 0 then error(#violations .. " violations:\n  " .. table.concat(violations, "\n  "), 0) end
+end)
+
 test("table: mixed-type columns sort the same way from every starting order", function()
   local values = { 2, 10, "11", "b", "A" }
   local function permutations(list)
