@@ -1,0 +1,12 @@
+-- luacov settings for `mise run coverage`: the repository's own Lua code,
+-- without the tests and vendored libraries.
+return {
+  statsfile = "luacov.stats.out",
+  reportfile = "luacov.report.out",
+  exclude = {
+    "^/",         -- installed modules (absolute paths)
+    "^tests/",
+    "^Libs/",
+    "/Libs/",
+  },
+}

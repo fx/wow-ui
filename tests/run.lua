@@ -1158,6 +1158,31 @@ test("list: thumb drag, striped rows, scrollListTo; ScrollView thumbs drag", fun
   root:unmount()
 end)
 
+test("coverage: the gate fails below 80% and passes from 80%", function()
+  local C = dofile("tests/coverage.lua")
+  local function report(hits, missed)
+    return table.concat({
+      "==============================================================================",
+      "Summary",
+      "==============================================================================",
+      "",
+      "File         Hits Missed Coverage",
+      "---------------------------------",
+      "Lib/A.lua    " .. hits .. "   " .. missed .. "     0.00%",
+      "Lib/B.lua    0    0     0.00%",
+      "---------------------------------",
+      "Total        " .. hits .. "   " .. missed .. "     0.00%",
+      "",
+    }, "\n")
+  end
+  ok(not C.check(report(79, 21), 80), "79 % fails")
+  local passed, lines = C.check(report(80, 20), 80)
+  ok(passed, "80 % passes")
+  ok(lines[#lines]:find("80.00%", 1, true), "reports the total: " .. lines[#lines])
+  ok(not C.check("no summary here"), "a report without a summary fails")
+  ok(not C.check("\nSummary\n===\nnothing\n"), "a summary without files fails")
+end)
+
 -- Loads a copy of the library the way an addon embeds it, from source text,
 -- as addon `name` from `folder` (both inside Interface/AddOns), with
 -- `minor` replacing the library's minor version.

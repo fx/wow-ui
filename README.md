@@ -26,7 +26,7 @@ Status: early. Developed against the retail client.
 | Path | What |
 |------|------|
 | `FxUI/` | The library addon (`FxUI-1.0` via LibStub) |
-| `tests/` | Headless tests against a strict stand-in for the client API |
+| `tests/` | Headless tests against a strict stand-in for the client API, and the coverage gate |
 | `tools/` | Font and texture generators |
 | `docs/` | Specs and change documents |
 
@@ -42,7 +42,9 @@ Status: early. Developed against the retail client.
 
 2. **Run the headless tests** after every change: `mise run test` (or `lua tests/run.lua`). `mise install` sets up the tools from `mise.toml`: Lua 5.1, the client's Lua, and Python with fontTools for the media generators. The stand-in in `tests/wow.lua` rejects client API methods it does not know, so a misspelt call fails here rather than in game. Add new APIs to it as FxUI starts using them.
 
-3. **Look at it in game.** `/reload`; `/fx` lists every registered command. Lua errors from FxUI go through the client's error handler, so an error addon such as BugSack shows them.
+3. **Check coverage** before opening a pull request: `mise run coverage` runs the tests under luacov and fails below 80 % line coverage (install luacov once with `luarocks install luacov`). CI runs both.
+
+4. **Look at it in game.** `/reload`; `/fx` lists every registered command. Lua errors from FxUI go through the client's error handler, so an error addon such as BugSack shows them.
 
 ## Slash commands
 
