@@ -1,0 +1,9 @@
+## Interface: 120105
+## Title: FxUI Theme: Teal
+## Notes: FxUI's dark theme with a teal accent.
+## Author: fx
+## Version: 0.1.0
+## Dependencies: FxUI
+## Category: Libraries
+
+Teal.lua

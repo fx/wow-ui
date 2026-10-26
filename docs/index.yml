@@ -52,7 +52,7 @@ changes:
     path: changes/0002-theme-addons.md
     description: Classic and Teal theme addons with their tests; CI coverage extended to them
     spec: theme-addons
-    status: draft
+    status: complete
     depends_on: ["0001"]
   - id: "0003"
     name: dev-tools

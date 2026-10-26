@@ -1,0 +1,9 @@
+## Interface: 120105
+## Title: FxUI Theme: Classic
+## Notes: Vanilla-era frames, buttons, checkboxes, tabs and fonts for FxUI, drawn with the client's own art.
+## Author: fx
+## Version: 0.1.0
+## Dependencies: FxUI
+## Category: Libraries
+
+Classic.lua
