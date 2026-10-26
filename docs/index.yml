@@ -61,3 +61,10 @@ changes:
     spec: dev-tools
     status: complete
     depends_on: ["0001", "0002"]
+  - id: "0004"
+    name: slider
+    path: changes/0004-slider.md
+    description: UI.Slider - a controlled slider over a range or a list of stops, with its skin hook and demo
+    spec: components
+    status: in-progress
+    depends_on: ["0001"]

@@ -710,6 +710,7 @@ test("themes: a skinned theme draws every component; pooled regions are clean af
       Button = { paint = mark("Button") },
       Badge = { paint = mark("Badge") },
       Toggle = { paint = mark("Toggle") },
+      Slider = { paint = mark("Slider") },
       Tab = { paint = mark("Tab"), paintRail = mark("TabRail"), railGap = function(b) return b:GetLeft(), b:GetRight() end },
       ItemCell = { paintIcon = mark("ItemCell") },
       Meter = { paint = mark("Meter") },
@@ -725,6 +726,7 @@ test("themes: a skinned theme draws every component; pooled regions are clean af
   local function view(theme)
     return UI.Window { title = "Skinned", width = 500, height = 600, theme = theme, status = "s", footer = { UI.Text { text = "f" } },
       UI.HStack { gap = 4, UI.Button { text = "Go" }, UI.Badge { text = "B" }, UI.Toggle { label = "On", checked = true } },
+      UI.Slider { label = "Level", min = 0, max = 10, value = 3 },
       UI.TabBar { tabs = { { id = "x", text = "One" }, { id = "y", text = "Two" } }, selected = "x" },
       UI.ItemCell { item = 17 },
       UI.Meter { value = 5, max = 10, label = "Fill", valueText = "5/10" },
@@ -735,7 +737,7 @@ test("themes: a skinned theme draws every component; pooled regions are clean af
     }
   end
   local root = UI.mount(UIParent, view("t-skin"))
-  for _, name in ipairs({ "Button", "Badge", "Toggle", "Tab", "TabRail", "ItemCell", "Meter", "Chart", "List", "HeaderCell", "Scroll", "Window", "WindowClose", "WindowFooter" }) do
+  for _, name in ipairs({ "Button", "Badge", "Toggle", "Slider", "Tab", "TabRail", "ItemCell", "Meter", "Chart", "List", "HeaderCell", "Scroll", "Window", "WindowClose", "WindowFooter" }) do
     ok(painted[name], name .. " painted by the skin")
   end
   local card = find(root, "VStack", function(n) return n.el.props.surface == "card" end)[1].region
@@ -752,6 +754,8 @@ test("themes: a skinned theme draws every component; pooled regions are clean af
   ok(button.fxBg and button.fxBg:IsShown(), "default background back")
   local toggle = find(root, "Toggle")[1].region
   ok(not toggle.fxSkinTex.Toggle:IsShown() and toggle.track:IsShown(), "default toggle track back")
+  local slider = find(root, "Slider")[1].region
+  ok(not slider.fxSkinTex.Slider:IsShown() and slider.track:IsShown() and slider.knob:IsShown(), "default slider track back")
   card = find(root, "VStack", function(n) return n.el.props.surface == "card" end)[1].region
   ok(not card.fxHasBackdrop and card.fxBg:IsShown(), "default card surface back")
   local win = find(root, "Window")[1].region
@@ -899,6 +903,110 @@ test("meter and sparkline: fill, labels, lines and the reference", function()
   })
   ok(s.lines[1]:IsShown() and not s.lines[2]:IsShown() and not s.dashes[1]:IsShown(), "unused segments hidden")
   root:unmount()
+end)
+
+-- A slider that keeps the value it is given, like a consumer would.
+local function sliderView(props)
+  return UI.component("SliderHost", {
+    init = function(ctx) ctx.state.value = props.value end,
+    render = function(_, ctx)
+      local p = {}
+      for k, v in pairs(props) do p[k] = v end
+      p.value = ctx.state.value
+      p.onChange = function(v)
+        props.changes[#props.changes + 1] = v
+        ctx:setState({ value = v })
+      end
+      return UI.HStack { width = 300, p.slider ~= false and UI.Slider(p) or nil }
+    end,
+  })
+end
+
+test("slider: stops, press and drag, wheel, value text room, disabled", function()
+  local changes = {}
+  local money = function(v) return v .. "g" end
+  local root = UI.mount(UIParent, sliderView({ label = "Min", values = { 0, 1, 5, 10, 50, 100 }, value = 5, format = money,
+    tooltip = "Hide below", changes = changes }) {})
+  UI.flush()
+  local node = find(root, "Slider")[1]
+  local f = node.region
+  eq(f.valueText:GetText(), "5g", "the value, formatted")
+  eq(f.label:GetText(), "Min")
+  local left, tw = f.track:GetLeft(), f.track:GetWidth()
+  ok(tw > 0, "a track")
+  -- The knob sits at the stop's share of the track: 5 is stop 3 of 6.
+  local kl, _, kw = f.knob:GetRect()
+  eq(kl + kw / 2, left + tw * 2 / 5, "knob at 2/5")
+  -- Room for the widest value whatever is shown.
+  local wide = f.valueText:GetWidth()
+  -- Press at the left end: the first stop; drag past the right end: the last.
+  local scale = f:GetEffectiveScale()
+  W.cursorX, W.cursorY = (left - 20) * scale, 0
+  f:_fire("OnEnter")
+  ok(GameTooltip:IsOwned(f), "its tooltip")
+  f:_fire("OnMouseDown", "LeftButton")
+  UI.flush()
+  eq(changes[#changes], 0, "pressed at the start")
+  W.cursorX = (left + tw + 50) * scale
+  f:GetScript("OnUpdate")(f, 0.016)
+  UI.flush()
+  eq(changes[#changes], 100, "dragged to the end")
+  local n = #changes
+  f:GetScript("OnUpdate")(f, 0.016)
+  eq(#changes, n, "no change while the stop stays")
+  W.cursorX = (left + tw * 0.62) * scale
+  f:GetScript("OnUpdate")(f, 0.016)
+  UI.flush()
+  eq(changes[#changes], 10, "the nearest stop under the cursor")
+  f:_fire("OnMouseUp")
+  eq(f:GetScript("OnUpdate"), nil, "drag ends on release")
+  f:_fire("OnLeave")
+  ok(not GameTooltip:IsOwned(f), "tooltip hidden")
+  eq(f.valueText:GetWidth(), wide, "the value's room does not change")
+  -- The wheel steps one stop, and stops at the ends.
+  f:_fire("OnMouseWheel", 1)
+  UI.flush()
+  eq(changes[#changes], 50)
+  f:_fire("OnMouseWheel", -1)
+  UI.flush()
+  eq(changes[#changes], 10)
+  n = #changes
+  f:_fire("OnMouseDown", "RightButton")
+  eq(#changes, n, "right button ignored")
+  root:unmount()
+
+  -- min, max and step; disabled.
+  changes = {}
+  root = UI.mount(UIParent, sliderView({ min = 0, max = 1, step = 0.25, value = 0.6, disabled = true, changes = changes }) {})
+  UI.flush()
+  f = find(root, "Slider")[1].region
+  eq(#f.fxStops, 5, "0 to 1 by 0.25")
+  eq(f.valueText:GetText(), "0.5", "the nearest stop")
+  eq(f:GetAlpha(), 0.5, "disabled dimmed")
+  f:_fire("OnMouseDown", "LeftButton")
+  f:_fire("OnMouseWheel", 1)
+  eq(#changes, 0, "disabled ignores the mouse")
+  ok(not f.label:IsShown(), "no label")
+  root:unmount()
+
+  -- A range of many stops measures its ends only; a bad step is 1; a
+  -- maximum below the minimum is the minimum.
+  changes = {}
+  root = UI.mount(UIParent, sliderView({ min = 0, max = 5000, step = 0, value = 9999, changes = changes }) {})
+  UI.flush()
+  f = find(root, "Slider")[1].region
+  eq(#f.fxStops, 1001, "at most 1,000 steps")
+  eq(f.valueText:GetText(), "5000")
+  root:unmount()
+  root = UI.mount(UIParent, UI.Slider { min = 3, max = 1, value = 3, width = 200, height = 20 })
+  UI.flush()
+  f = find(root, "Slider")[1].region
+  eq(#f.fxStops, 1)
+  ok(f.track:GetWidth() > 0, "laid out at a size given in full")
+  f:_fire("OnMouseDown", "LeftButton")
+  f:_fire("OnMouseUp")
+  root:unmount()
+  W.cursorX, W.cursorY = -100, -100
 end)
 
 test("controls: button variants, hover and press, busy, tooltip; badges; toggles", function()
