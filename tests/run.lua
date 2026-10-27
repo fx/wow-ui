@@ -935,6 +935,7 @@ test("slider: stops, press and drag, wheel, value text room, disabled", function
   local node = find(root, "Slider")[1]
   local f = node.region
   eq(f.valueText:GetText(), "5g", "the value, formatted")
+  ok(f:IsMouseWheelEnabled(), "takes the wheel")
   eq(f.label:GetText(), "Min")
   local left, tw = f.track:GetLeft(), f.track:GetWidth()
   ok(tw > 0, "a track")

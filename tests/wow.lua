@@ -220,7 +220,11 @@ function Frame:GetChildren()
   end
   return unpack(out)
 end
+-- Like the client, a frame gets wheel events only once the wheel is enabled.
+function Frame:EnableMouseWheel(v) self._wheel = v and true or false end
+function Frame:IsMouseWheelEnabled() return self._wheel or false end
 function Frame:_fire(name, ...)
+  if name == "OnMouseWheel" and not self._wheel then return end
   local fn = self._scripts[name]
   if fn then fn(self, ...) end
   if self._hooks[name] then
@@ -228,7 +232,7 @@ function Frame:_fire(name, ...)
   end
 end
 function Frame:_fireSize() self:_fire("OnSizeChanged", self._w, self._h) end
-setters(Frame, [[EnableMouseWheel SetMovable SetResizable SetClampedToScreen
+setters(Frame, [[SetMovable SetResizable SetClampedToScreen
   SetToplevel RegisterForDrag StartMoving StopMovingOrSizing StartSizing SetResizeBounds
   EnableKeyboard]])
 function Frame:SetPropagateKeyboardInput(v)

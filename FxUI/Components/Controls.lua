@@ -555,6 +555,7 @@ I.defineHost("Slider", {
   create = function(holder)
     local f = CreateFrame("Frame", nil, holder)
     f:EnableMouse(true)
+    f:EnableMouseWheel(true)
     f.label = f:CreateFontString(nil, "OVERLAY")
     f.label:SetWordWrap(false)
     f.valueText = f:CreateFontString(nil, "OVERLAY")
