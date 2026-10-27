@@ -413,19 +413,22 @@ I.defineHost("Toggle", {
 
 local SLIDER_TRACK_H, SLIDER_KNOB, SLIDER_GAP, SLIDER_TRACK_W = 4, 12, 10, 120
 
+local SLIDER_MAX_STOPS = 1000
+
 -- The stops a slider moves between: `values` as given, or min to max by
--- step (at most 1,000 stops).
+-- step. A range that would need more than 1,000 stops steps by the
+-- smallest whole multiple of `step` that keeps it to 1,000.
 local function sliderStops(p)
   if type(p.values) == "table" and #p.values > 0 then return p.values end
   local lo, hi = tonumber(p.min) or 0, tonumber(p.max) or 1
   local step = tonumber(p.step) or 1
   if step <= 0 then step = 1 end
   if hi < lo then hi = lo end
-  step = math.max(step, (hi - lo) / 1000)
-  local out, v = {}, lo
-  while v < hi - step * 1e-6 do
-    out[#out + 1] = v
-    v = v + step
+  step = step * math.max(math.ceil((hi - lo) / ((SLIDER_MAX_STOPS - 1) * step) - 1e-9), 1)
+  local out, i = {}, 0
+  while lo + i * step < hi - step * 1e-6 do
+    out[#out + 1] = lo + i * step
+    i = i + 1
   end
   out[#out + 1] = hi
   return out
