@@ -253,6 +253,7 @@ I.defineHost("Button", {
       self.fxPressed = false
       paintButton(self)
     end)
+
     -- The handler runs synchronously inside the real click, so a protected
     -- call made from it keeps the hardware event.
     b:SetScript("OnClick", function(self, mouseButton)
@@ -338,7 +339,13 @@ local function paintPressable(f)
   f.underline:Hide()
   if skin and skin.paint then
     skin.paint(f, p, { hover = f.fxHover and enabled, pressed = f.fxPressed and enabled, enabled = enabled })
-  elseif hot and mode == "fill" then
+    I.leave(prevTheme)
+    return
+  end
+  -- FxUI's own drawing: nothing a skin drew stays (regions are pooled
+  -- across themes).
+  I.clearSkin(f)
+  if hot and mode == "fill" then
     I.applySurface(f, "gold", nil, p.radius or "r4", f.fxPressed and 0.28 or 0.16)
   elseif hot and mode == "underline" then
     f.underline:SetColorTexture(I.rgba(f.fxPressed and "muted" or "gold"))
@@ -431,6 +438,7 @@ I.defineHost("Pressable", {
     local f = node.region
     f.fxHover, f.fxPressed = false, false
     I.clearSurface(f)
+    I.clearSkin(f)
     f.underline:Hide()
     hideTooltip(f)
   end,

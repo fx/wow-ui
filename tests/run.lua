@@ -1263,6 +1263,46 @@ test("pressable: any content as a click target, underlined or washed on hover, w
   root:unmount()
 end)
 
+test("pressable: its own drawing hides what a skin left, and release clears it", function()
+  local host = CreateFrame("Frame", nil, UIParent)
+  host:SetSize(200, 60)
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+  local skinOf, tex = I.skin, nil
+  local function skinned(name)
+    if name == "Pressable" then return { paint = function(fr) tex = I.skinTexture(fr, "bg") end } end
+    return skinOf(name)
+  end
+  local function view(disabled) return UI.Pressable { disabled = disabled, UI.Text { text = "x" } } end
+  I.skin = skinned
+  local root = UI.mount(host, view(false))
+  UI.flush()
+  local f = find(root, "Pressable")[1].region
+  ok(tex and tex:IsShown(), "the skin drew")
+  -- The theme changes to one without a skin: every path hides it.
+  I.skin = skinOf
+  f:_fire("OnEnter")
+  ok(not tex:IsShown(), "hover hides the skin's drawing")
+  f:_fire("OnLeave")
+  for _, disabled in ipairs({ false, true }) do
+    I.skin = skinned
+    root:update(view(not disabled))
+    UI.flush()
+    ok(tex:IsShown())
+    I.skin = skinOf
+    root:update(view(disabled))
+    UI.flush()
+    ok(not tex:IsShown(), disabled and "disabled hides it" or "at rest hides it")
+  end
+  -- Released, a pooled frame keeps nothing of the skin.
+  I.skin = skinned
+  root:update(view(false))
+  UI.flush()
+  ok(tex:IsShown())
+  root:unmount()
+  I.skin = skinOf
+  ok(not tex:IsShown(), "release hides it")
+end)
+
 test("toggle group: one choice of a few; choosing another calls onChange", function()
   local host = CreateFrame("Frame", nil, UIParent)
   host:SetSize(400, 60)
