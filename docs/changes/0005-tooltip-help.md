@@ -5,7 +5,7 @@
 Adds FxUI's own tooltip, drawn in the active theme (`UI.showTooltip`, `UI.hideTooltip`, `UI.tooltipOwner`), and `UI.Help`, a small `?` icon that explains something in that tooltip, so screens can drop lines of explanatory text. Buttons and sliders show their `tooltip` in it; item cells keep the client's item tooltip.
 
 **Spec:** [Components](../specs/components/#tooltip)
-**Status:** in-progress
+**Status:** complete
 **Depends On:** 0001
 
 ## Motivation
@@ -41,7 +41,7 @@ The [components spec](../specs/components/#tooltip) owns the tooltip and the hel
 - [x] Tests: content, sizing, placement, owners, release; the skin hook; button and slider tooltips
 - [x] Component demo: a Help card
 - [x] Specs: components, theme tokens, theme addons
-- [ ] Acceptance: `mise run test` and the coverage gate pass; CI green; the privacy search finds nothing
+- [x] Acceptance: `mise run test` and the coverage gate pass; CI green; the privacy search finds nothing
 
 ## Open Questions
 

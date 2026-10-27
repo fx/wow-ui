@@ -21,5 +21,5 @@
 | 0001 | [FxUI Core Library](changes/0001-fxui-core.md) | [Architecture](specs/architecture/) | complete | — |
 | 0002 | [Theme Addons](changes/0002-theme-addons.md) | [Theme Addons](specs/theme-addons/) | complete | 0001 |
 | 0003 | [Dev Tools](changes/0003-dev-tools.md) | [Dev Tools](specs/dev-tools/) | complete | 0001, 0002 |
-| 0004 | [Slider](changes/0004-slider.md) | [Components](specs/components/) | in-progress | 0001 |
-| 0005 | [Tooltip and help](changes/0005-tooltip-help.md) | [Components](specs/components/) | in-progress | 0001 |
+| 0004 | [Slider](changes/0004-slider.md) | [Components](specs/components/) | complete | 0001 |
+| 0005 | [Tooltip and help](changes/0005-tooltip-help.md) | [Components](specs/components/) | complete | 0001 |

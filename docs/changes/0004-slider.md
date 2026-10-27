@@ -5,7 +5,7 @@
 Adds `UI.Slider`: a controlled horizontal slider over a numeric range or a list of stops, with press, drag and wheel input, a value label with stable room, a skin hook, and an entry in the component demo.
 
 **Spec:** [Components](../specs/components/#slider)
-**Status:** in-progress
+**Status:** complete
 **Depends On:** 0001
 
 ## Motivation
@@ -39,7 +39,7 @@ The [components spec](../specs/components/#slider) owns the slider; its scenario
 - [x] Tests: stops, press, drag, wheel, value room, disabled; the skin hook
 - [x] Component demo: a Sliders card
 - [x] Components spec: Slider requirements and skin contract
-- [ ] Acceptance: `mise run test` and the coverage gate pass; CI green; the privacy search finds nothing
+- [x] Acceptance: `mise run test` and the coverage gate pass; CI green; the privacy search finds nothing
 
 ## Open Questions
 

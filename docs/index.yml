@@ -66,12 +66,12 @@ changes:
     path: changes/0004-slider.md
     description: UI.Slider - a controlled slider over a range or a list of stops, with its skin hook and demo
     spec: components
-    status: in-progress
+    status: complete
     depends_on: ["0001"]
   - id: "0005"
     name: tooltip-help
     path: changes/0005-tooltip-help.md
     description: FxUI's own themed tooltip and the UI.Help "?" icon; buttons and sliders use the tooltip
     spec: components
-    status: in-progress
+    status: complete
     depends_on: ["0001"]
