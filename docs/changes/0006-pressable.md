@@ -5,7 +5,7 @@
 Adds `UI.Pressable`, a container that makes any content a click target: a price over its change, an icon with a label. It stacks its children like `VStack` (or `HStack`), is underlined on hover (or washed, for menu items), shows a tooltip, calls `onClick` on a left click and `onContextMenu` on a right one.
 
 **Spec:** [Components](../specs/components/#pressable)
-**Status:** in-progress
+**Status:** complete
 **Depends On:** 0005
 
 ## Motivation
@@ -38,7 +38,7 @@ The [components spec](../specs/components/#pressable) owns it; its scenario is t
 
 - [x] `UI.Pressable` in `FxUI/Components/Controls.lua`
 - [x] Test; demo card; components spec
-- [ ] Acceptance: `mise run test` passes; CI green
+- [x] Acceptance: `mise run test` passes; CI green
 
 ## Open Questions
 

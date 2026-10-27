@@ -5,7 +5,7 @@
 Adds `UI.showMenu`, one themed context menu at the cursor whose items are [Pressables](0006-pressable.md), closed by choosing an item or clicking anywhere else, and `onContextMenu(item, i, key)` on lists and tables for a right-clicked row.
 
 **Spec:** [Components](../specs/components/#context-menu), [Data components](../specs/data-components/#list)
-**Status:** in-progress
+**Status:** complete
 **Depends On:** 0005, 0006
 
 ## Motivation
@@ -41,7 +41,7 @@ The [components spec](../specs/components/#context-menu) owns the menu; the [dat
 - [x] `UI.showMenu`, `UI.hideMenu`, `UI.menuOwner` in `FxUI/Components/Controls.lua`
 - [x] `onContextMenu` on `UI.List`, passed through by `UI.Table`
 - [x] Tests; demo; components and data components specs
-- [ ] Acceptance: `mise run test` passes; CI green
+- [x] Acceptance: `mise run test` passes; CI green
 
 ## Open Questions
 

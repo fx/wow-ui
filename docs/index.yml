@@ -80,19 +80,19 @@ changes:
     path: changes/0006-pressable.md
     description: UI.Pressable, any content as a click target with hover shade and tooltip
     spec: components
-    status: in-progress
+    status: complete
     depends_on: ["0005"]
   - id: "0007"
     name: context-menu
     path: changes/0007-context-menu.md
     description: A themed context menu at the cursor; row right-clicks in lists and tables
     spec: components
-    status: in-progress
+    status: complete
     depends_on: ["0005", "0006"]
   - id: "0008"
     name: toggle-group
     path: changes/0008-toggle-group.md
     description: UI.ToggleGroup; item cells without their own click select their list row
     spec: components
-    status: in-progress
+    status: complete
     depends_on: ["0007"]

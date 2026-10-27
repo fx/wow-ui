@@ -5,7 +5,7 @@
 Adds `UI.ToggleGroup`, a few mutually exclusive choices side by side (a chart's period, a view), and makes an item cell without its own click select the list row it sits in, so a click on an item's name behaves like a click on its row.
 
 **Spec:** [Components](../specs/components/#toggle-group), [Data components](../specs/data-components/#item-cell)
-**Status:** in-progress
+**Status:** complete
 **Depends On:** 0007
 
 ## Motivation
@@ -35,7 +35,7 @@ The [components spec](../specs/components/#toggle-group) owns the toggle group; 
 - [x] `UI.ToggleGroup` in `FxUI/Components/Controls.lua`; demo card
 - [x] Item cells select their row (`I.rowSelect`)
 - [x] Tests; components and data components specs
-- [ ] Acceptance: `mise run test` passes; CI green
+- [x] Acceptance: `mise run test` passes; CI green
 
 ## Open Questions
 
