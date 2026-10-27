@@ -2,7 +2,7 @@
 
 ## Summary
 
-A scrolled list keeps what is being read in place while its items change: a table with a row-key function no longer remounts (and jumps to the top) on every render, and rows added above the view no longer push it down.
+A scrolled list keeps what is being read in place while its items change: a table with a row-key function no longer remounts (and jumps to the top) on every render, and rows added above the view no longer push it down when the list is given a new items table.
 
 **Spec:** [Data components](../specs/data-components/#list), [Rendering](../specs/rendering/)
 **Status:** complete
@@ -28,7 +28,7 @@ The [rendering spec](../specs/rendering/) owns element identity; the [data compo
 ### Decisions
 
 - **Only strings and numbers are identity keys**: anything else under `key` is a prop for the component to use.
-- **Anchor on the top row by key**, with its partial offset, and only when the items table changes and the list is scrolled: at the top, new rows show, as in a log or feed.
+- **Anchor on the top row by key**, with its partial offset, and only when the list is given a new items table and is scrolled: at the top, new rows show, as in a log or feed. Edits made in place to the same table are not anchored (the list cannot tell them from a re-render); a caller that wants its place kept gives the list a new table.
 
 ## Tasks
 
