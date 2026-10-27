@@ -13,11 +13,12 @@ local TOOLTIP_MAX_W, TOOLTIP_GAP = 260, 6
 
 local TooltipView = I.defineComponent("FxTooltip", function(props)
   local body = { gap = 4, padding = { 8, 10 }, surface = "tooltip", maxWidth = props.maxWidth or TOOLTIP_MAX_W }
-  if props.title and props.title ~= "" then
+  local titled = props.title ~= nil and props.title ~= ""
+  if titled then
     body[#body + 1] = UI.Text { text = props.title, style = "strong", wrap = true }
   end
   if props.text and props.text ~= "" then
-    body[#body + 1] = UI.Text { text = props.text, color = props.title and "muted" or "text", wrap = true }
+    body[#body + 1] = UI.Text { text = props.text, color = titled and "muted" or "text", wrap = true }
   end
   return UI.VStack(body)
 end)
