@@ -384,7 +384,8 @@ end
 -- (gap, padding, align, justify), or an HStack with horizontal = true.
 -- Props: onClick(frame) on a left click, onContextMenu(frame) on a right
 -- click (in a list row with a menu and without its own, that row's menu),
--- disabled, tooltip, hover (underline|fill|none), radius.
+-- disabled (ignores left clicks only), tooltip, hover (underline|fill|none),
+-- radius.
 I.defineHost("Pressable", {
   container = true,
   create = function(holder)
@@ -417,8 +418,9 @@ I.defineHost("Pressable", {
       if not node then return end
       local p = node.el.props
       if mouseButton == "RightButton" then
+        -- Disabled ignores only the left click.
         if p.onContextMenu then
-          if not p.disabled then p.onContextMenu(self) end
+          p.onContextMenu(self)
         else
           I.rowContextMenu(node)
         end

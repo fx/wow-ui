@@ -1252,6 +1252,18 @@ test("pressable: any content as a click target, underlined or washed on hover, w
   f:_click()
   eq(#clicks, 1)
   f:_fire("OnLeave")
+  -- Disabled ignores only the left click: a right click still reaches its
+  -- own menu.
+  local dmenus, dclicks = 0, 0
+  local droot = UI.mount(CreateFrame("Frame", nil, UIParent), UI.Pressable { disabled = true,
+    onClick = function() dclicks = dclicks + 1 end, onContextMenu = function() dmenus = dmenus + 1 end,
+    UI.Text { text = "off" } })
+  local d = find(droot, "Pressable")[1].region
+  d:_click("RightButton")
+  eq(dmenus, 1, "a disabled Pressable's own menu")
+  d:_click("LeftButton")
+  eq(dclicks, 0, "and no left click")
+  droot:unmount()
   -- A skin paints it instead.
   local painted
   local skinOf = I.skin
