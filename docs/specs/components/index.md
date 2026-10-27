@@ -80,11 +80,11 @@ This spec owns the behaviour of FxUI's general-purpose components: text primitiv
 - `UI.Help` MUST draw a small `?` mark in a circle (`size`, default 14 px, or the theme's `metrics.Help.size`), brighter on hover, and on hover show its `title` and `text` in the [tooltip](#tooltip) (with `maxWidth`); leaving or releasing it MUST hide the tooltip.
 - It is the place for explanations a screen would otherwise spell out in a line of text.
 
-#### Scenario: Explain a mark
+#### Scenario: Explain the columns
 
-- **GIVEN** a column whose values may carry an `A` mark, with a help icon in its header row
+- **GIVEN** a table header with a help icon whose text explains the columns
 - **WHEN** the player hovers the icon
-- **THEN** the tooltip explains the mark, above the icon, and hides when the cursor leaves
+- **THEN** the tooltip shows that text, above the icon, and hides when the cursor leaves
 
 ### Tabs
 

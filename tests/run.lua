@@ -1109,7 +1109,7 @@ test("tooltip and help: themed, sized to content, above or below its owner, one 
   host:SetSize(400, 100)
   host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 100, -300)
   local root = UI.mount(host, UI.HStack { gap = 8,
-    UI.Help { title = "Marks", text = "A: from Auctionator. ~: another realm, a suggestion only." },
+    UI.Help { title = "Columns", text = "Price: the lowest listing. Qty: how many are listed." },
     UI.Help { text = "Short" },
     UI.Help { size = 18 },
   })
@@ -1124,7 +1124,7 @@ test("tooltip and help: themed, sized to content, above or below its owner, one 
   eq(UI.tooltipOwner(), f, "its tooltip")
   local tip = I.tooltip
   local texts = find(tip.root, "Text")
-  eq(texts[1].el.props.text, "Marks", "the title")
+  eq(texts[1].el.props.text, "Columns", "the title")
   eq(texts[1].el.props.style, "strong")
   eq(texts[2].el.props.color, "muted", "the text under a title")
   eq(find(tip.root, "VStack")[1].el.props.surface, "tooltip", "the theme's tooltip surface")
