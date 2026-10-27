@@ -109,8 +109,24 @@ refresh = function(node, w, h)
   local total = n * rowH
   node.viewW, node.viewH = w, h
 
+  -- Scroll anchoring: when a keyed list gets a new items table while
+  -- scrolled, the row at the top of the view keeps its place (in-place edits
+  -- of the same table are not anchored), so rows added or removed above it
+  -- do not move what is being read. At the top, new rows show.
+  if p.key ~= nil and items ~= node.anchorItems and node.anchorKey ~= nil and (node.offset or 0) > 0 then
+    for i = 1, n do
+      if keyOf(p, items[i], i) == node.anchorKey then
+        node.offset = (i - 1) * rowH + node.anchorDelta
+        break
+      end
+    end
+  end
   local offset = I.clamp(node.offset or 0, 0, math.max(total - h, 0))
   node.offset = offset
+  local top = math.floor(offset / rowH) + 1
+  node.anchorItems = items
+  node.anchorKey = (p.key ~= nil and top <= n) and keyOf(p, items[top], top) or nil
+  node.anchorDelta = offset - (top - 1) * rowH
 
   local first = math.max(math.floor(offset / rowH) + 1 - overscan, 1)
   local last = math.min(math.ceil((offset + h) / rowH) + overscan, n)

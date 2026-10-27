@@ -294,6 +294,45 @@ test("list: 5,000 items keep a constant number of row frames", function()
   root:unmount()
 end)
 
+test("list: rows added above a scrolled view keep it in place; at the top new rows show", function()
+  local host = CreateFrame("Frame")
+  host:SetSize(400, 320)
+  local function items(from, to)
+    local out = {}
+    for i = to, from, -1 do out[#out + 1] = { id = i, text = "Row " .. i } end
+    return out
+  end
+  local function list(its, key)
+    return UI.List { items = its, key = key, rowHeight = 32, render = function(it) return UI.Text { text = it.text } end }
+  end
+  local root = UI.mount(host, list(items(1, 100), "id"))
+  local l = find(root, "List")[1]
+  l.region:_fire("OnMouseWheel", -1) -- 96 px down: row 97 at the top
+  eq(l.offset, 96)
+  root:update(list(items(1, 103), "id"))
+  eq(l.offset, 96 + 3 * 32, "three newer rows above: the same row stays on top")
+  eq(l.children[1].el.key, 100 - 3 + 2, "the overscan above it is what it was")
+  -- At the top the newest rows show.
+  l.offset = 0
+  root:update(list(items(1, 103), "id"))
+  root:update(list(items(1, 105), "id"))
+  eq(l.offset, 0)
+  local top
+  for _, c in ipairs(l.children) do
+    if c.y == 0 then top = c end
+  end
+  eq(top.el.key, 105, "the newest row is at the top of the view")
+  eq(find({ node = top }, "Text")[1].region:GetText(), "Row 105")
+  root:unmount()
+  -- Rows keyed by index have nothing to anchor.
+  root = UI.mount(host, list(items(1, 105)))
+  l = find(root, "List")[1]
+  l.region:_fire("OnMouseWheel", -1)
+  root:update(list(items(1, 110)))
+  eq(l.offset, 96)
+  root:unmount()
+end)
+
 test("table: header clicks sort ascending then descending, stable, empty last", function()
   local host = CreateFrame("Frame")
   host:SetSize(500, 400)
@@ -2028,6 +2067,17 @@ test("render: a root update with another key creates a new node", function()
   root:update(UI.Text { key = "b", text = "c" })
   ok(root.node == second, "the same key updates in place")
   eq(second.region:GetText(), "c")
+  root:unmount()
+end)
+
+test("render: a function key is a prop, not an identity, so the node is kept", function()
+  local host = CreateFrame("Frame")
+  host:SetSize(100, 100)
+  local root = UI.mount(host, UI.VStack { UI.Text { key = function() return 1 end, text = "a" } })
+  local first = root.node.children[1]
+  root:update(UI.VStack { UI.Text { key = function() return 1 end, text = "b" } })
+  ok(root.node.children[1] == first, "a new closure every render keeps the node")
+  eq(first.region:GetText(), "b")
   root:unmount()
 end)
 

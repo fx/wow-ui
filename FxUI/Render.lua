@@ -36,7 +36,11 @@ local function makeElement(typ, t)
   for k, v in pairs(t) do
     if type(k) ~= "number" then props[k] = v end
   end
-  return { [ELEMENT] = true, type = typ, props = props, children = collectChildren(t, {}), key = props.key }
+  -- Only a string or number key is an identity: a component may take a
+  -- function `key` (a list's row key) that is a new closure every render.
+  local key = props.key
+  if type(key) ~= "string" and type(key) ~= "number" then key = nil end
+  return { [ELEMENT] = true, type = typ, props = props, children = collectChildren(t, {}), key = key }
 end
 I.makeElement = makeElement
 
