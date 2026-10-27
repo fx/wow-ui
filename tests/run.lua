@@ -1013,6 +1013,58 @@ test("slider: stops, press and drag, wheel, value text room, disabled", function
   W.cursorX, W.cursorY = -100, -100
 end)
 
+test("slider: a drag notifies once per stop, ends on the left button, stops when disabled; release hides its tooltip", function()
+  local changes = {}
+  -- A consumer that does not take the value (yet): the slider keeps drawing 5.
+  local function view(disabled)
+    return UI.HStack { width = 300, UI.Slider { values = { 0, 1, 5, 10, 50, 100 }, value = 5, disabled = disabled,
+      tooltip = "Explains", onChange = function(v) changes[#changes + 1] = v end } }
+  end
+  local root = UI.mount(UIParent, view(false))
+  UI.flush()
+  local f = find(root, "Slider")[1].region
+  local left, tw = f.track:GetLeft(), f.track:GetWidth()
+  local scale = f:GetEffectiveScale()
+  W.cursorX, W.cursorY = (left + tw * 2 / 5) * scale, 0
+  f:_fire("OnMouseDown", "LeftButton")
+  eq(#changes, 0, "pressed on the stop it shows")
+  W.cursorX = (left + tw + 50) * scale
+  local drag = f:GetScript("OnUpdate")
+  drag(f, 0.016)
+  drag(f, 0.016)
+  drag(f, 0.016)
+  eq(#changes, 1, "once for the new stop, though the value stays 5")
+  eq(changes[1], 100)
+  W.cursorX = (left - 50) * scale
+  drag(f, 0.016)
+  drag(f, 0.016)
+  eq(#changes, 2, "once for the next stop")
+  eq(changes[2], 0)
+  -- Another button's release does not end the drag; the left button's does.
+  f:_fire("OnMouseUp", "RightButton")
+  ok(f:GetScript("OnUpdate") ~= nil, "still dragging after a right-button release")
+  f:_fire("OnMouseUp", "LeftButton")
+  eq(f:GetScript("OnUpdate"), nil, "the left button's release ends it")
+  -- Disabled mid-drag: the drag stops and the slider no longer reports.
+  f:_fire("OnMouseDown", "LeftButton")
+  drag = f:GetScript("OnUpdate")
+  ok(drag ~= nil, "dragging again")
+  local n = #changes
+  root:update(view(true))
+  eq(f:GetScript("OnUpdate"), nil, "turned off mid-drag, the drag ends")
+  W.cursorX = (left + tw + 50) * scale
+  drag(f, 0.016)
+  eq(#changes, n, "a disabled slider does not report")
+  ok(not f.fxDrag, "not dragging")
+  -- Unmounting a hovered slider hides its tooltip.
+  root:update(view(false))
+  f:_fire("OnEnter")
+  eq(UI.tooltipOwner(), f, "its tooltip")
+  root:unmount()
+  eq(UI.tooltipOwner(), nil, "hidden on release")
+  W.cursorX, W.cursorY = -100, -100
+end)
+
 test("tooltip and help: themed, sized to content, above or below its owner, one owner at a time", function()
   local host = CreateFrame("Frame", nil, UIParent)
   host:SetSize(400, 100)

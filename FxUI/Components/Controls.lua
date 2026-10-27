@@ -491,20 +491,31 @@ local function sliderAt(f)
   return math.floor(frac * (n - 1) + 0.5) + 1
 end
 
--- Move to stop i; onChange only when the stop changes.
+-- Move to stop i; onChange only when the stop changes: from the value
+-- shown, or during a drag from the last stop the drag reached, so a
+-- consumer that has not taken the value yet hears of each stop once.
 local function sliderSet(f, i)
   local node = f.fxNode
   if not node then return end
   local p = node.el.props
   local stops = f.fxStops
   i = math.min(math.max(i, 1), #stops)
-  if i == sliderIndex(stops, p.value) then return end
+  local from = f.fxDragStop or sliderIndex(stops, p.value)
+  if f.fxDrag then f.fxDragStop = i end
+  if i == from then return end
   if p.onChange then p.onChange(stops[i]) end
 end
 
+local function sliderEndDrag(f)
+  f.fxDrag, f.fxDragStop = nil, nil
+  f:SetScript("OnUpdate", nil)
+end
+
 local function sliderDrag(f)
-  if not f.fxDrag or not f.fxNode then
-    f:SetScript("OnUpdate", nil)
+  local node = f.fxNode
+  if not f.fxDrag or not node or node.el.props.disabled then
+    sliderEndDrag(f)
+    paintSlider(f)
     return
   end
   sliderSet(f, sliderAt(f))
@@ -570,9 +581,9 @@ I.defineHost("Slider", {
       paintSlider(self)
       self:SetScript("OnUpdate", sliderDrag)
     end)
-    f:SetScript("OnMouseUp", function(self)
-      self.fxDrag = nil
-      self:SetScript("OnUpdate", nil)
+    f:SetScript("OnMouseUp", function(self, button)
+      if button and button ~= "LeftButton" then return end
+      sliderEndDrag(self)
       paintSlider(self)
     end)
     f:SetScript("OnMouseWheel", function(self, delta)
@@ -585,6 +596,7 @@ I.defineHost("Slider", {
   update = function(node, p)
     local f = node.region
     f.fxStops = sliderStops(p)
+    if p.disabled and f.fxDrag then sliderEndDrag(f) end
     I.setText(f.label, p.label, "body", "text")
     f.label:SetShown(p.label ~= nil and p.label ~= "")
     I.setText(f.valueText, sliderText(p, f.fxStops[sliderIndex(f.fxStops, p.value)]), "mono", "text")
@@ -614,8 +626,9 @@ I.defineHost("Slider", {
   end,
   release = function(node)
     local f = node.region
-    f.fxHover, f.fxDrag = false, nil
-    f:SetScript("OnUpdate", nil)
+    f.fxHover = false
+    sliderEndDrag(f)
+    hideTooltip(f)
   end,
 })
 

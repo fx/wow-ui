@@ -56,9 +56,9 @@ This spec owns the behaviour of FxUI's general-purpose components: text primitiv
 
 - `UI.Slider` MUST draw a labelled horizontal track with a fill and a knob at `value`, and the value as text at its end (`format(value)`, default `tostring`), in `tone` (default `gold`) for the fill.
 - It MUST move between stops: `values` (an ascending list) when given, else `min` to `max` by `step` (default 1; a step of 0 or less is 1, and at most 1,000 stops; a `max` below `min` is `min`). Stops are evenly spaced along the track, so a list of stops can make a range that grows faster than linearly. A `value` between stops shows at the nearest one.
-- Pressing on the slider MUST move to the stop under the cursor, dragging MUST follow it until the button is released, and the wheel MUST move one stop up or down, stopping at the ends. Each of these MUST call `onChange(stop)` once each time the stop changes, and never when it stays the same; only the left button acts.
+- Pressing on the slider MUST move to the stop under the cursor, dragging MUST follow it until the left button is released, and the wheel MUST move one stop up or down, stopping at the ends. Each of these MUST call `onChange(stop)` once each time the stop changes, and never when it stays the same: a press and the wheel compare with the stop `value` shows, a drag with the last stop it reached, so a consumer that has not taken the new value yet is not called again while the cursor rests; only the left button acts.
 - A Slider MUST NOT change its own value; the consumer passes the new `value`.
-- `disabled` MUST draw it faded and ignore the mouse; `tooltip` MUST show on hover in FxUI's [tooltip](#tooltip).
+- `disabled` MUST draw it faded and ignore the mouse; becoming disabled during a drag MUST end the drag. `tooltip` MUST show on hover in FxUI's [tooltip](#tooltip), and releasing the slider MUST hide it.
 - Room for the widest value text MUST be reserved (every stop measured when there are at most 64, else the first and last), so the track does not move as the value changes. Its natural width is the label, a 120 px track and that room.
 
 #### Scenario: Drag to the end
