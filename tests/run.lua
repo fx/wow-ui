@@ -317,6 +317,12 @@ test("list: rows added above a scrolled view keep it in place; at the top new ro
   root:update(list(items(1, 103), "id"))
   root:update(list(items(1, 105), "id"))
   eq(l.offset, 0)
+  local top
+  for _, c in ipairs(l.children) do
+    if c.y == 0 then top = c end
+  end
+  eq(top.el.key, 105, "the newest row is at the top of the view")
+  eq(find({ node = top }, "Text")[1].region:GetText(), "Row 105")
   root:unmount()
   -- Rows keyed by index have nothing to anchor.
   root = UI.mount(host, list(items(1, 105)))
