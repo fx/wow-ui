@@ -1374,6 +1374,11 @@ test("context menu: at the cursor, an item runs and closes it, a click outside c
   eq(UI.menuOwner(), owner)
   M.catcher:_click("RightButton")
   eq(UI.menuOwner(), nil)
+  for _, button in ipairs({ "MiddleButton", "Button4", "LeftButton" }) do
+    UI.showMenu(owner, { { text = "Again" } })
+    M.catcher:_click(button)
+    eq(UI.menuOwner(), nil, "any button outside closes it: " .. button)
+  end
   UI.showMenu(owner, { { text = "Again" } })
   UI.hideMenu()
   eq(UI.menuOwner(), nil, "closed for any owner")
