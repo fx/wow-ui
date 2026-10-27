@@ -23,7 +23,7 @@ This spec owns the behaviour of FxUI's data-oriented components: money, item cel
 - While the client has not loaded the item, the cell MUST show a placeholder (`placeholder`, or `item:<id>` in the muted color), request the item, and update and re-lay out once it loads.
 - After the name it MUST show `×<qty>` when `qty` is given, else `ilvl <n>` when `showLevel` is set, else `note`.
 - Hovering MUST show the client's item tooltip, followed by lines the consumer adds through `tooltip(GameTooltip, itemID)`.
-- A click with the chat-link modifier (Shift by default) MUST insert the item link into chat; any other click MUST call `onClick(frame, itemID, link, mouseButton)`.
+- A click with the chat-link modifier (Shift by default) MUST insert the item link into chat; any other click MUST call `onClick(frame, itemID, link, mouseButton)`. Without an `onClick`, a left click on a cell in a list row MUST select that row (the list's `onSelect`), as a click on the row would.
 - `iconSize` (default 24) sets the icon size; `style` the name's font token. When the cell is narrower than its content, the name MUST be truncated, not the icon or the extra text.
 
 #### Scenario: Item loads later
@@ -46,6 +46,7 @@ This spec owns the behaviour of FxUI's data-oriented components: money, item cel
 - The wheel MUST scroll three rows per notch; a scrollbar MUST show only when the rows are taller than the list, and `scrollbar = "always"` reserves its width even when not needed. The thumb is draggable.
 - Rows MUST be highlighted under the cursor unless `highlight = false`; `striped` shades every second row.
 - With `onSelect`, a left press MUST show a pressed state and releasing on the same row MUST call `onSelect(item, i, key)`; controls inside a row keep their own clicks.
+- With `onContextMenu`, a right click on a row MUST call `onContextMenu(item, i, key)` (a table passes it through); see [components: context menu](../components/#context-menu).
 - The row whose key equals `selected` MUST stay highlighted as selected. Row state precedence: pressed, then selected, then hover, then stripe.
 - `empty` (text) MUST show centred when there are no items.
 - `rowPadding` sets each row's padding (default `{ 0, 12 }`); `visibleRows` (default 8) sets the natural height.
@@ -167,3 +168,5 @@ A Table renders a header `HStack` of `UI.HeaderCell`s (its right padding include
 | Date | Change | Document |
 |------|--------|----------|
 | 2026-10-26 | Initial spec created from the implementation | [0001-fxui-core](../../changes/0001-fxui-core.md) |
+| 2026-10-26 | Row right-clicks: `onContextMenu` | [0007-context-menu](../../changes/0007-context-menu.md) |
+| 2026-10-26 | An item cell without its own click selects its list row | [0008-toggle-group](../../changes/0008-toggle-group.md) |

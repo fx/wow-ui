@@ -245,12 +245,25 @@ inherit(Button, Frame)
 function Button:Enable() self._enabled = true end
 function Button:Disable() self._enabled = false end
 function Button:IsEnabled() return self._enabled ~= false end
--- Test helper: a real click, honouring the disabled state like the client.
-function Button:_click(mouseButton)
-  if self._enabled == false then return end
-  self:_fire("OnClick", mouseButton or "LeftButton")
+-- The clicks a button reacts to, like the client: LeftButtonUp until it
+-- registers others ("AnyUp" for every button).
+function Button:RegisterForClicks(...)
+  self._clicks = {}
+  for _, c in ipairs({ ... }) do self._clicks[c] = true end
 end
-setters(Button, "RegisterForClicks SetMotionScriptsWhileDisabled")
+-- Test helper: a real click, like the client: the button gets the mouse
+-- down and up even while disabled, and OnClick only while enabled and for
+-- a button it registered.
+function Button:_click(mouseButton)
+  mouseButton = mouseButton or "LeftButton"
+  self:_fire("OnMouseDown", mouseButton)
+  self:_fire("OnMouseUp", mouseButton)
+  if self._enabled == false then return end
+  local clicks = self._clicks or { LeftButtonUp = true }
+  if not (clicks.AnyUp or clicks[mouseButton .. "Up"]) then return end
+  self:_fire("OnClick", mouseButton)
+end
+setters(Button, "SetMotionScriptsWhileDisabled")
 
 -- Textures
 inherit(Texture, Region)

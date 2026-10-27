@@ -86,6 +86,43 @@ This spec owns the behaviour of FxUI's general-purpose components: text primitiv
 - **WHEN** the player hovers the icon
 - **THEN** the tooltip shows that text, above the icon, and hides when the cursor leaves
 
+### Toggle group
+
+- `UI.ToggleGroup` MUST show a few mutually exclusive choices side by side, `items = { { id, text, tooltip, disabled } }`, on the theme's `inset` surface: the chosen one (`value`) as a secondary button, the others as ghost buttons, with an optional `label` before them; `size` defaults to `sm`.
+- Clicking another enabled choice MUST call `onChange(id)`; clicking the chosen one or a disabled one MUST do nothing. The group does not change its own value: the consumer passes the new `value`.
+
+#### Scenario: Chart period
+
+- **GIVEN** a toggle group with Hour, Day, Week and Month, Day chosen
+- **WHEN** the player clicks Week
+- **THEN** `onChange("week")` is called once
+
+### Pressable
+
+- `UI.Pressable` MUST make any content a click target: it lays out its children as a vertical stack (`gap`, `padding`, `align`, `justify`), or a horizontal one with `horizontal = true`, and calls `onClick(frame)` on a left click.
+- A right click MUST call `onContextMenu(frame)` when given; otherwise, inside a list row whose list has a menu, it MUST open that row's menu (see [context menu](#context-menu)).
+- Hovering MUST decorate it by `hover`: `underline` (default) a 1 px line in the `gold` role under its content, from the content's left to its right edge, never a background; `fill` a `gold` wash behind it (`radius`, default `r4`), for menu items; `none` nothing. Pressing deepens it. Hovering MUST also show its `tooltip` in the [tooltip](#tooltip); leaving MUST clear both. A skin's `paint` replaces the decoration.
+- `disabled` MUST draw it undecorated and ignore left clicks.
+
+#### Scenario: Click a price
+
+- **GIVEN** a table cell showing a price over its change, wrapped in a Pressable with a tooltip
+- **WHEN** the player hovers and clicks it
+- **THEN** the price is underlined, the tooltip shows, and `onClick` runs once
+
+### Context menu
+
+- `UI.showMenu(owner, items, opts)` MUST show one menu at the cursor: `items` = `{ { text, onClick, disabled, tooltip } }` or `{ divider = true }`, `opts.title` a muted heading. It uses the theme's `tooltip` surface, is at least 140 px wide, every item as wide as the menu, and stays on screen.
+- An item is a [Pressable](#pressable) washed in `gold` on hover: clicking an enabled one MUST close the menu, then run its `onClick`; a disabled one is drawn muted and does nothing.
+- A click anywhere outside the menu MUST close it (and do nothing else). While it is open nothing under it MUST react to the pointer: opening it hides FxUI's tooltip and the client's, a full-screen layer under it takes the pointer, and polled hover (list rows, chart crosshairs) stops. `UI.hideMenu(owner)` MUST close it only while that owner shows it (any owner when nil); `UI.menuOwner()` MUST return the frame it is shown for, or nil. Showing another menu replaces it.
+- A [list](../data-components/#list) or [table](../data-components/#table) MUST call `onContextMenu(item, i, key)` when a row is right-clicked (and take the mouse for it even without `onSelect`), also when the click lands on a button, item cell or Pressable in the row: those leave a right click to the row's menu, so a right click never runs a button there. A left click never calls it.
+
+#### Scenario: Row menu
+
+- **GIVEN** a table whose `onContextMenu` shows a menu with "Show" and "Check"
+- **WHEN** the player right-clicks the second row and clicks "Show"
+- **THEN** the menu opened at the cursor for that row's item, the item ran once, and the menu is closed
+
 ### Tabs
 
 - `UI.TabBar` MUST draw a row of tabs from `tabs = { { id, text, count } }` with `selected` (an id) and call `onSelect(id)` when a tab is clicked; `padding` sets the row's padding.
@@ -169,6 +206,7 @@ Each component publishes what a skin receives ([theming](../theming/) owns the s
 | Badge | `paint(frame, props, toneToken)` | `frame.label` with text set |
 | Toggle | `paint(button, props, state)` | `state = { hover, checked, enabled }`; `button.track`, `.knob`, `.label` |
 | Help | `paint(frame, props, state)` | `state = { hover }`; `frame.circle`, `.mark` |
+| Pressable | `paint(frame, props, state)` | `state = { hover, pressed, enabled }` |
 | Slider | `paint(frame, props, state)` | `state = { hover, dragging, enabled, fraction }`; `frame.track`, `.fill`, `.knob`, `.label`, `.valueText` (FxUI places the knob and sizes the fill) |
 | Tab | `paint(button, props, state)`, `paintRail(segment)`, `railGap(tabButton)` | `state = { hover, selected }`; `button.label`, `.count`, `.underline` |
 | Window | `paint(frame, props, size)`, `paintClose(button, hover)`, `paintFooter(footer)` | `frame.header`, `.title`, `.headerFoot`, `.headerLine`, `.grip` |
@@ -199,3 +237,6 @@ The toast stack is an FxUI tree mounted once, on first use, in a `DIALOG`-strata
 | 2026-10-26 | Initial spec created from the implementation (the planned component table previously in the architecture spec) | [0001-fxui-core](../../changes/0001-fxui-core.md) |
 | 2026-10-26 | Slider | [0004-slider](../../changes/0004-slider.md) |
 | 2026-10-26 | Tooltip and help icon; buttons and sliders use the tooltip | [0005-tooltip-help](../../changes/0005-tooltip-help.md) |
+| 2026-10-26 | Pressable | [0006-pressable](../../changes/0006-pressable.md) |
+| 2026-10-26 | Context menu; row right-clicks in lists and tables | [0007-context-menu](../../changes/0007-context-menu.md) |
+| 2026-10-26 | Toggle group | [0008-toggle-group](../../changes/0008-toggle-group.md) |

@@ -170,6 +170,31 @@ local ControlsPage = UI.component("DemoControls", {
             UI.Help { text = "Text alone, without a title." },
           },
         }),
+        Card("Toggle group", {
+          UI.ToggleGroup { label = "PERIOD", value = s.period or "day",
+            items = { { id = "hour", text = "Hour" }, { id = "day", text = "Day" }, { id = "week", text = "Week" }, { id = "month", text = "Month", disabled = true, tooltip = "Not enough history yet." } },
+            onChange = function(id) ctx:setState({ period = id }) end },
+        }),
+        Card("Pressable", {
+          Row { gap = 8,
+            UI.Pressable { tooltip = "Any content can be a click target.", padding = { 2, 6 }, align = "end",
+              onClick = function() ctx:setState({ pressed = (s.pressed or 0) + 1 }) end,
+              UI.Money { value = 1234500 },
+              UI.Text { text = "clicked " .. (s.pressed or 0) .. "\195\151", style = "small", color = "muted" },
+            },
+            UI.Pressable { disabled = true, padding = { 2, 6 }, UI.Text { text = "Disabled", color = "muted" } },
+            UI.Pressable { padding = { 2, 6 }, tooltip = "Opens a context menu.",
+              onClick = function(frame)
+                UI.showMenu(frame, {
+                  { text = "Reset the count", onClick = function() ctx:setState({ pressed = 0 }) end },
+                  { divider = true },
+                  { text = "Not available", disabled = true },
+                }, { title = "MENU" })
+              end,
+              UI.Text { text = "Menu\226\128\166" },
+            },
+          },
+        }),
         Card("Sliders", {
           UI.Slider { label = "At least", values = { 0, 10000, 50000, 100000, 500000, 1000000, 5000000 }, value = s.minPrice,
             format = function(v) return UI.formatMoney(v, { short = true }) end,

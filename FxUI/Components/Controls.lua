@@ -249,8 +249,15 @@ I.defineHost("Button", {
       self.fxPressed = true
       paintButton(self)
     end)
-    b:SetScript("OnMouseUp", function(self)
+    b:SetScript("OnMouseUp", function(self, mouseButton)
       self.fxPressed = false
+      -- The client gives a disabled button no click, only the mouse up: a
+      -- right click released on it still opens its list row's menu. An
+      -- enabled one does that in OnClick.
+      local node = self.fxNode
+      if mouseButton == "RightButton" and node and not self:IsEnabled() and self:IsMouseOver() then
+        I.rowContextMenu(node)
+      end
       paintButton(self)
     end)
     -- The handler runs synchronously inside the real click, so a protected
@@ -258,6 +265,9 @@ I.defineHost("Button", {
     b:SetScript("OnClick", function(self, mouseButton)
       local node = self.fxNode
       if not node then return end
+      -- In a list row with a menu, a right click opens that menu, so it
+      -- never runs the button.
+      if mouseButton == "RightButton" and I.rowContextMenu(node) then return end
       local p = node.el.props
       if not buttonEnabled(p) then return end
       if p.onClick then p.onClick(self, mouseButton) end
@@ -284,6 +294,254 @@ I.defineHost("Button", {
     hideTooltip(b)
   end,
 })
+
+---------------------------------------------------------------------------
+-- ToggleGroup
+---------------------------------------------------------------------------
+
+-- One choice of a few, side by side: items = { { id, text, tooltip,
+-- disabled } }, value (the chosen id), onChange(id) when another is
+-- chosen, size (sm default), label (shown before the choices). The chosen
+-- one is drawn as a secondary button, the rest as ghost buttons, on the
+-- theme's inset surface.
+UI.ToggleGroup = I.defineComponent("ToggleGroup", function(props)
+  local row = { gap = 2, padding = 2, surface = "inset", align = "center" }
+  for _, item in ipairs(props.items or {}) do
+    local chosen = item.id == props.value
+    row[#row + 1] = UI.Button {
+      text = item.text or tostring(item.id),
+      size = props.size or "sm",
+      variant = chosen and "secondary" or "ghost",
+      disabled = item.disabled,
+      tooltip = item.tooltip,
+      onClick = function()
+        if not chosen and props.onChange then props.onChange(item.id) end
+      end,
+    }
+  end
+  local group = UI.HStack(row)
+  if not props.label then return group end
+  return UI.HStack { gap = 8, align = "center", UI.Text { text = props.label, style = "label", color = "muted" }, group }
+end)
+
+---------------------------------------------------------------------------
+-- Pressable
+---------------------------------------------------------------------------
+
+-- The hover decoration (`hover`): "underline" (default) draws a line in
+-- the gold role under the content, "fill" a gold wash behind it (for
+-- menu items), "none" nothing; pressing deepens it. A skin's paint
+-- replaces it; disabled, it is drawn as is.
+local function paintPressable(f)
+  local node = f.fxNode
+  if not node then return end
+  local prevTheme = I.enter(node)
+  local p = node.el.props
+  local enabled = not p.disabled
+  local hot = enabled and (f.fxHover or f.fxPressed)
+  local mode = p.hover or "underline"
+  local skin = I.skin("Pressable")
+  I.clearSurface(f)
+  f.underline:Hide()
+  if skin and skin.paint then
+    skin.paint(f, p, { hover = f.fxHover and enabled, pressed = f.fxPressed and enabled, enabled = enabled })
+    I.leave(prevTheme)
+    return
+  end
+  -- FxUI's own drawing: nothing a skin drew stays (regions are pooled
+  -- across themes).
+  I.clearSkin(f)
+  if hot and mode == "fill" then
+    I.applySurface(f, "gold", nil, p.radius or "r4", f.fxPressed and 0.28 or 0.16)
+  elseif hot and mode == "underline" then
+    f.underline:SetColorTexture(I.rgba(f.fxPressed and "muted" or "gold"))
+    f.underline:Show()
+  end
+  I.leave(prevTheme)
+end
+
+-- Under the laid-out content: from its leftmost to its rightmost child, at
+-- the bottom of the lowest.
+local function placeUnderline(node)
+  local left, right, bottom
+  for _, c in ipairs(node.children or {}) do
+    local h = c
+    while h and h.def do h = h.child end
+    if h and h.x and h.w and h.w > 0 then
+      left = math.min(left or h.x, h.x)
+      right = math.max(right or (h.x + h.w), h.x + h.w)
+      bottom = math.max(bottom or (h.y + h.h), h.y + h.h)
+    end
+  end
+  local line = node.region.underline
+  line:ClearAllPoints()
+  if not left then return end
+  line:SetPoint("TOPLEFT", node.region, "TOPLEFT", left, -bottom)
+  line:SetSize(right - left, 1)
+end
+
+-- Any content as a click target: its children are laid out as a VStack
+-- (gap, padding, align, justify), or an HStack with horizontal = true.
+-- Props: onClick(frame) on a left click, onContextMenu(frame) on a right
+-- click (in a list row with a menu and without its own, that row's menu),
+-- disabled (ignores left clicks only), tooltip, hover (underline|fill|none),
+-- radius.
+I.defineHost("Pressable", {
+  container = true,
+  create = function(holder)
+    local f = CreateFrame("Button", nil, holder)
+    f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    f:SetMotionScriptsWhileDisabled(true)
+    f.underline = f:CreateTexture(nil, "OVERLAY")
+    f.underline:Hide()
+    f:SetScript("OnEnter", function(self)
+      self.fxHover = true
+      paintPressable(self)
+      local node = self.fxNode
+      if node then showTooltip(self, node.el.props.tooltip) end
+    end)
+    f:SetScript("OnLeave", function(self)
+      self.fxHover, self.fxPressed = false, false
+      paintPressable(self)
+      hideTooltip(self)
+    end)
+    f:SetScript("OnMouseDown", function(self)
+      self.fxPressed = true
+      paintPressable(self)
+    end)
+    f:SetScript("OnMouseUp", function(self)
+      self.fxPressed = false
+      paintPressable(self)
+    end)
+    f:SetScript("OnClick", function(self, mouseButton)
+      local node = self.fxNode
+      if not node then return end
+      local p = node.el.props
+      if mouseButton == "RightButton" then
+        -- Disabled ignores only the left click.
+        if p.onContextMenu then
+          p.onContextMenu(self)
+        else
+          I.rowContextMenu(node)
+        end
+        return
+      end
+      if not p.disabled and p.onClick then p.onClick(self, mouseButton) end
+    end)
+    return f
+  end,
+  update = function(node, p)
+    -- Enabled even when disabled, so a right click still reaches the row.
+    node.region:Enable()
+    paintPressable(node.region)
+  end,
+  measure = function(node, maxW, maxH)
+    return I.stackMeasure(node.children, node.el.props, node.el.props.horizontal, maxW, maxH)
+  end,
+  layout = function(node, w, h)
+    I.stackLayout(node.children, node.el.props, node.el.props.horizontal, w, h)
+    placeUnderline(node)
+  end,
+  release = function(node)
+    local f = node.region
+    f.fxHover, f.fxPressed = false, false
+    I.clearSurface(f)
+    I.clearSkin(f)
+    f.underline:Hide()
+    hideTooltip(f)
+  end,
+})
+
+---------------------------------------------------------------------------
+-- Context menu
+---------------------------------------------------------------------------
+
+local MENU_MIN_W = 140
+
+local MenuView = I.defineComponent("FxMenu", function(props)
+  local body = { gap = 0, padding = 4, surface = "tooltip", align = "stretch", minWidth = MENU_MIN_W }
+  if props.title and props.title ~= "" then
+    body[#body + 1] = UI.VStack { padding = { 4, 8, 2, 8 }, UI.Text { text = props.title, style = "label", color = "muted" } }
+  end
+  for _, item in ipairs(props.items or {}) do
+    if item.divider then
+      body[#body + 1] = UI.Divider {}
+    else
+      body[#body + 1] = UI.Pressable {
+        hover = "fill",
+        padding = { 5, 8 },
+        disabled = item.disabled,
+        tooltip = item.tooltip,
+        onClick = function()
+          UI.hideMenu()
+          if item.onClick then item.onClick() end
+        end,
+        UI.Text { text = item.text or "", color = item.disabled and "muted" or "text" },
+      }
+    end
+  end
+  return UI.VStack(body)
+end)
+
+-- One menu for every copy of the library: an upgrade keeps it.
+I.menu = I.menu or {}
+local MN = I.menu
+
+-- Show a context menu for `owner` at the cursor: `items` = { { text,
+-- onClick, disabled, tooltip } or { divider = true } }, opts.title. A
+-- click on an item runs it and closes the menu; a click anywhere else
+-- closes it. One menu at a time: showing another replaces it.
+function UI.showMenu(owner, items, opts)
+  opts = opts or {}
+  local view = MenuView { items = items, title = opts.title }
+  if not MN.host then
+    -- A click outside the menu lands on the catcher, which closes it.
+    local catcher = CreateFrame("Button", nil, UIParent)
+    catcher:SetAllPoints(UIParent)
+    catcher:SetFrameStrata("FULLSCREEN_DIALOG")
+    catcher:EnableMouse(true)
+    catcher:RegisterForClicks("AnyUp")
+    catcher:SetScript("OnClick", function() UI.hideMenu() end)
+    catcher:Hide()
+    local host = CreateFrame("Frame", nil, UIParent)
+    host:SetFrameStrata("FULLSCREEN_DIALOG")
+    host:SetFrameLevel(catcher:GetFrameLevel() + 10)
+    host:SetClampedToScreen(true)
+    I.followScale(host, false)
+    MN.catcher, MN.host = catcher, host
+    MN.root = UI.mount(host, view)
+  else
+    MN.root:update(view)
+  end
+  local host = MN.host
+  local w, h = I.measure(MN.root.node, 400, 2000)
+  host:SetSize(w, h)
+  MN.root:layout()
+  local x, y = GetCursorPosition()
+  local scale = host:GetEffectiveScale()
+  host:ClearAllPoints()
+  host:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale, y / scale)
+  -- Nothing under the menu keeps showing what the pointer was over.
+  UI.hideTooltip()
+  if GameTooltip then GameTooltip:Hide() end
+  MN.owner = owner
+  MN.catcher:Show()
+  host:Show()
+end
+
+-- Close the menu when `owner` shows it (any owner when nil).
+function UI.hideMenu(owner)
+  if MN.host and (owner == nil or MN.owner == owner) then
+    MN.host:Hide()
+    MN.catcher:Hide()
+    MN.owner = nil
+  end
+end
+
+-- The frame the menu is shown for, or nil while it is closed.
+function UI.menuOwner()
+  return MN.host and MN.host:IsShown() and MN.owner or nil
+end
 
 ---------------------------------------------------------------------------
 -- Badge

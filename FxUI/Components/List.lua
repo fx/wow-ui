@@ -9,11 +9,11 @@ local THUMB_MIN = 24
 
 local refresh
 
--- Index of the row under the cursor, or nil (outside, past the end, or
--- over the scrollbar).
+-- Index of the row under the cursor, or nil (outside, past the end, over
+-- the scrollbar, or under an open menu).
 local function rowAt(node)
   local f = node.region
-  if not f:IsVisible() or not f:IsMouseOver() then return nil end
+  if not f:IsVisible() or not f:IsMouseOver() or UI.menuOwner() then return nil end
   local p = node.el.props
   local rowH = p.rowHeight or 32
   local scale = f:GetEffectiveScale()
@@ -136,6 +136,7 @@ refresh = function(node, w, h)
     }
   end
   I.reconcileChildren(node, f.content, els)
+  node.first = first
 
   local scrolls = total > h
   node.gutter = scrollW()
@@ -181,7 +182,8 @@ end
 -- render(item, i) -> element, striped, overscan, rowPadding, empty,
 -- highlight (hover highlight, default on), selected (key of the active row),
 -- onSelect(item, i, key) (row clicks select; buttons inside rows keep their
--- own clicks), scrollbar ("always" reserves its width even when not needed).
+-- own clicks), onContextMenu(item, i, key) (a row right-clicked),
+-- scrollbar ("always" reserves its width even when not needed).
 I.defineHost("List", {
   create = function(holder)
     local f = CreateFrame("Frame", nil, holder)
@@ -238,7 +240,16 @@ I.defineHost("List", {
     end)
     f:SetScript("OnMouseUp", function(self, button)
       local node = self.fxNode
-      if not node or not node.pressed then return end
+      if not node then return end
+      if button == "RightButton" then
+        local p, i = node.el.props, rowAt(node)
+        if i and p.onContextMenu then
+          local item = (p.items or {})[i]
+          p.onContextMenu(item, i, keyOf(p, item, i))
+        end
+        return
+      end
+      if not node.pressed then return end
       local i = node.pressed
       node.pressed = nil
       local p = node.el.props
@@ -262,7 +273,7 @@ I.defineHost("List", {
   end,
   update = function(node, p)
     local f = node.region
-    f:EnableMouse(p.onSelect ~= nil)
+    f:EnableMouse(p.onSelect ~= nil or p.onContextMenu ~= nil)
     f.track:SetWidth(thumbW())
     if I.setShape(f.track, 4, false) then
       f.track:SetVertexColor(I.rgba("ground"))
@@ -286,6 +297,47 @@ I.defineHost("List", {
     thumb:SetScript("OnUpdate", nil)
   end,
 })
+
+-- The list row a node sits in: the list's props, the row's item, index
+-- and key; nil outside a list row.
+local function rowOf(node)
+  local row = node
+  while row and row.parent do
+    local list = row.parent
+    if list.host == I.hosts.List then
+      local p = list.el.props
+      for j, child in ipairs(list.children or {}) do
+        if child == row then
+          local i = (list.first or 1) + j - 1
+          local item = (p.items or {})[i]
+          if item == nil then return nil end
+          return p, item, i, keyOf(p, item, i)
+        end
+      end
+      return nil
+    end
+    row = list
+  end
+end
+
+-- A control inside a list row was right-clicked: open that row's menu
+-- (onContextMenu) when the list has one. True when it did, so the control
+-- leaves the click to the row.
+function I.rowContextMenu(node)
+  local p, item, i, key = rowOf(node)
+  if not p or not p.onContextMenu then return false end
+  p.onContextMenu(item, i, key)
+  return true
+end
+
+-- A control inside a list row that has no click of its own was clicked:
+-- select that row (onSelect) when the list selects. True when it did.
+function I.rowSelect(node)
+  local p, item, i, key = rowOf(node)
+  if not p or not p.onSelect then return false end
+  p.onSelect(item, i, key)
+  return true
+end
 
 -- Scroll a mounted list (by its node) to make row i visible.
 function UI.scrollListTo(frame, i)

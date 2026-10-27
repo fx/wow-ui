@@ -1191,6 +1191,338 @@ test("tooltip and help: themed, sized to content, above or below its owner, one 
   eq(UI.tooltipOwner(), nil, "hidden for any owner")
 end)
 
+test("pressable: any content as a click target, underlined or washed on hover, with a tooltip", function()
+  local host = CreateFrame("Frame", nil, UIParent)
+  host:SetSize(300, 100)
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 100, -300)
+  local clicks, menus, disabled = {}, 0, false
+  local function view()
+    return UI.HStack { gap = 8,
+      UI.Pressable { padding = { 2, 6 }, gap = 2, tooltip = "Search it", disabled = disabled,
+        onClick = function(_, b) clicks[#clicks + 1] = b end,
+        UI.Text { text = "First line" },
+        UI.Text { text = "Second", style = "small" },
+      },
+      UI.Pressable { horizontal = true, gap = 4, hover = "fill", onContextMenu = function() menus = menus + 1 end,
+        UI.Text { text = "A" }, UI.Text { text = "B" } },
+    }
+  end
+  local root = UI.mount(host, view())
+  UI.flush()
+  local ps = find(root, "Pressable")
+  local p, texts = ps[1], find({ node = ps[1] }, "Text")
+  local t1, t2 = texts[1], texts[2]
+  eq(p.h, 4 + t1.h + 2 + t2.h, "a column of its children with its padding and gap")
+  eq(p.w, 12 + math.max(t1.w, t2.w))
+  local row = find({ node = ps[2] }, "Text")
+  eq(ps[2].w, row[1].w + 4 + row[2].w, "or a row")
+  local f = p.region
+  ok(not f.underline:IsShown(), "plain at rest")
+  f:_fire("OnEnter")
+  ok(f.underline:IsShown(), "underlined on hover")
+  ok(not (f.fxBg and f.fxBg:IsShown()), "no background")
+  local w, h = f.underline:GetSize()
+  eq(w, math.max(t1.w, t2.w), "as wide as the content")
+  eq(h, 1)
+  eq(UI.tooltipOwner(), f, "its tooltip")
+  f:_fire("OnMouseDown")
+  f:_fire("OnMouseUp")
+  f:_click("LeftButton")
+  eq(clicks[1], "LeftButton")
+  f:_click("RightButton")
+  eq(#clicks, 1, "a right click is not a click")
+  f:_fire("OnLeave")
+  ok(not f.underline:IsShown(), "plain when left")
+  eq(UI.tooltipOwner(), nil)
+  -- Fill: a wash behind it; a right click goes to its own menu.
+  local g = ps[2].region
+  g:_fire("OnEnter")
+  ok(g.fxBg and g.fxBg:IsShown(), "washed on hover")
+  ok(not g.underline:IsShown())
+  g:_click("RightButton")
+  eq(menus, 1, "its own menu")
+  g:_fire("OnLeave")
+  ok(not g.fxBg:IsShown())
+  -- Disabled: drawn as is and not clickable.
+  disabled = true
+  root:update(view())
+  UI.flush()
+  f:_fire("OnEnter")
+  ok(not f.underline:IsShown(), "no decoration while disabled")
+  f:_click()
+  eq(#clicks, 1)
+  f:_fire("OnLeave")
+  -- Disabled ignores only the left click: a right click still reaches its
+  -- own menu.
+  local dmenus, dclicks = 0, 0
+  local droot = UI.mount(CreateFrame("Frame", nil, UIParent), UI.Pressable { disabled = true,
+    onClick = function() dclicks = dclicks + 1 end, onContextMenu = function() dmenus = dmenus + 1 end,
+    UI.Text { text = "off" } })
+  local d = find(droot, "Pressable")[1].region
+  d:_click("RightButton")
+  eq(dmenus, 1, "a disabled Pressable's own menu")
+  d:_click("LeftButton")
+  eq(dclicks, 0, "and no left click")
+  droot:unmount()
+  -- A skin paints it instead.
+  local painted
+  local skinOf = I.skin
+  I.skin = function(name) if name == "Pressable" then return { paint = function(_, _, st) painted = st end } end return skinOf(name) end
+  f:_fire("OnEnter")
+  I.skin = skinOf
+  ok(painted and painted.enabled == false and painted.hover == false, "the skin gets the state")
+  f:_fire("OnLeave")
+  root:unmount()
+end)
+
+test("pressable: its own drawing hides what a skin left, and release clears it", function()
+  local host = CreateFrame("Frame", nil, UIParent)
+  host:SetSize(200, 60)
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+  local skinOf, tex = I.skin, nil
+  local function skinned(name)
+    if name == "Pressable" then return { paint = function(fr) tex = I.skinTexture(fr, "bg") end } end
+    return skinOf(name)
+  end
+  local function view(disabled) return UI.Pressable { disabled = disabled, UI.Text { text = "x" } } end
+  I.skin = skinned
+  local root = UI.mount(host, view(false))
+  UI.flush()
+  local f = find(root, "Pressable")[1].region
+  ok(tex and tex:IsShown(), "the skin drew")
+  -- The theme changes to one without a skin: every path hides it.
+  I.skin = skinOf
+  f:_fire("OnEnter")
+  ok(not tex:IsShown(), "hover hides the skin's drawing")
+  f:_fire("OnLeave")
+  for _, disabled in ipairs({ false, true }) do
+    I.skin = skinned
+    root:update(view(not disabled))
+    UI.flush()
+    ok(tex:IsShown())
+    I.skin = skinOf
+    root:update(view(disabled))
+    UI.flush()
+    ok(not tex:IsShown(), disabled and "disabled hides it" or "at rest hides it")
+  end
+  -- Released, a pooled frame keeps nothing of the skin.
+  I.skin = skinned
+  root:update(view(false))
+  UI.flush()
+  ok(tex:IsShown())
+  root:unmount()
+  I.skin = skinOf
+  ok(not tex:IsShown(), "release hides it")
+end)
+
+test("toggle group: one choice of a few; choosing another calls onChange", function()
+  local host = CreateFrame("Frame", nil, UIParent)
+  host:SetSize(400, 60)
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+  local got = {}
+  local function view(value)
+    return UI.ToggleGroup { label = "PERIOD", value = value, onChange = function(id) got[#got + 1] = id end,
+      items = { { id = "day", text = "Day" }, { id = "week", text = "Week", tooltip = "Seven days" }, { id = "month", text = "Month", disabled = true } } }
+  end
+  local root = UI.mount(host, view("day"))
+  UI.flush()
+  local buttons = find(root, "Button")
+  eq(#buttons, 3)
+  eq(buttons[1].el.props.variant, "secondary", "the chosen one")
+  eq(buttons[2].el.props.variant, "ghost")
+  eq(buttons[2].el.props.tooltip, "Seven days")
+  eq(find(root, "Text")[1].el.props.text, "PERIOD", "its label")
+  buttons[1].region:_click()
+  eq(#got, 0, "choosing the chosen one again changes nothing")
+  buttons[2].region:_click()
+  eq(got[1], "week")
+  buttons[3].region:_click()
+  eq(#got, 1, "a disabled choice does nothing")
+  root:update(UI.ToggleGroup { value = "week", items = { { id = "day" }, { id = "week" } } })
+  UI.flush()
+  buttons = find(root, "Button")
+  eq(buttons[2].el.props.variant, "secondary")
+  eq(buttons[1].el.props.text, "day", "the id when no text")
+  eq(#find(root, "Text"), 0, "no label")
+  root:unmount()
+end)
+
+test("context menu: at the cursor, an item runs and closes it, a click outside closes it", function()
+  local ran = {}
+  W.cursorX, W.cursorY = 300, 400
+  local owner = CreateFrame("Frame", nil, UIParent)
+  UI.showMenu(owner, {
+    { text = "Show", onClick = function() ran[#ran + 1] = "show" end, tooltip = "In the other window" },
+    { divider = true },
+    { text = "Later", disabled = true, onClick = function() ran[#ran + 1] = "later" end },
+  }, { title = "ITEM" })
+  local M = I.menu
+  eq(UI.menuOwner(), owner)
+  ok(M.catcher:IsShown(), "a click outside lands on the catcher")
+  local at = M.host._points[1]
+  eq(at[1], "TOPLEFT")
+  eq(at[4], 300)
+  eq(at[5], 400, "at the cursor")
+  local w = M.host:GetSize()
+  ok(w >= 140, "at least 140 wide: " .. w)
+  eq(find(M.root, "Text")[1].el.props.text, "ITEM", "its title")
+  eq(#find(M.root, "Divider"), 1)
+  local items = find(M.root, "Pressable")
+  eq(#items, 2)
+  eq(items[1].w, items[2].w, "items as wide as the menu")
+  items[1].region:_fire("OnEnter")
+  eq(UI.tooltipOwner(), items[1].region, "an item's tooltip")
+  items[1].region:_fire("OnLeave")
+  items[2].region:_click()
+  eq(#ran, 0, "a disabled item does nothing")
+  eq(UI.menuOwner(), owner, "and the menu stays")
+  items[1].region:_click()
+  eq(ran[1], "show")
+  eq(UI.menuOwner(), nil, "an item closes the menu")
+  ok(not M.catcher:IsShown())
+  -- A click outside closes it; another owner's hide does not.
+  UI.showMenu(owner, { { text = "Again" } })
+  UI.hideMenu(CreateFrame("Frame"))
+  eq(UI.menuOwner(), owner)
+  M.catcher:_click("RightButton")
+  eq(UI.menuOwner(), nil)
+  for _, button in ipairs({ "MiddleButton", "Button4", "LeftButton" }) do
+    UI.showMenu(owner, { { text = "Again" } })
+    M.catcher:_click(button)
+    eq(UI.menuOwner(), nil, "any button outside closes it: " .. button)
+  end
+  UI.showMenu(owner, { { text = "Again" } })
+  UI.hideMenu()
+  eq(UI.menuOwner(), nil, "closed for any owner")
+end)
+
+test("list and table: right-clicking a row asks for its menu", function()
+  local host = CreateFrame("Frame")
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+  host:SetSize(400, 300)
+  local items, got = {}, nil
+  for i = 1, 5 do items[i] = { id = i * 10 } end
+  local root = UI.mount(host, UI.Table {
+    items = items, key = "id", rowHeight = 30,
+    columns = { { key = "id", title = "Id", flex = 1 } },
+    onContextMenu = function(item, i, key) got = { item, i, key } end,
+  })
+  UI.flush()
+  local list = find(root, "List")[1]
+  ok(list.region:IsMouseEnabled(), "a menu alone takes the mouse")
+  local l, b, w, h = list.region:GetRect()
+  W.cursorX, W.cursorY = l + 50, b + h - 45 -- second row
+  list.region:_fire("OnMouseDown", "RightButton")
+  list.region:_fire("OnMouseUp", "RightButton")
+  ok(got and got[1] == items[2] and got[2] == 2 and got[3] == 20, "the row's item, index and key")
+  got = nil
+  list.region:_fire("OnMouseUp", "LeftButton")
+  eq(got, nil, "a left click is not a menu")
+  W.cursorX, W.cursorY = -100, -100
+  list.region:_fire("OnMouseUp", "RightButton")
+  eq(got, nil, "nor a click outside the rows")
+  root:unmount()
+  -- Controls inside a row: a right click on them opens the row's menu,
+  -- and never runs a button.
+  local ran = 0
+  root = UI.mount(host, UI.Table {
+    items = items, key = "id", rowHeight = 30,
+    columns = {
+      { key = "item", flex = 1, render = function() return UI.ItemCell { item = 2772 } end },
+      { key = "price", width = 80, render = function(it) return UI.Pressable { onClick = function() end, UI.Text { text = tostring(it.id) } } end },
+      { key = "run", width = 60, render = function() return UI.Button { text = "Run", onClick = function() ran = ran + 1 end } end },
+    },
+    onContextMenu = function(item, i, key) got = { item, i, key } end,
+  })
+  UI.flush()
+  for _, host in ipairs({ "ItemCell", "Pressable", "Button" }) do
+    got = nil
+    find(root, host)[3].region:_click("RightButton")
+    ok(got and got[2] == 3 and got[3] == 30, host .. ": the third row's menu")
+  end
+  eq(ran, 0, "the button did not run")
+  find(root, "Button")[1].region:_click("LeftButton")
+  eq(ran, 1, "a left click still does")
+  root:unmount()
+  -- A disabled (or busy) button gets no click from the client, yet a right
+  -- click on it still opens the row's menu, once; a left click stays inert.
+  local menus = 0
+  for _, props in ipairs({ { disabled = true }, { busy = true }, {} }) do
+    menus, ran = 0, 0
+    root = UI.mount(host, UI.Table {
+      items = items, key = "id", rowHeight = 30,
+      columns = { { key = "run", width = 60, render = function()
+        return UI.Button { text = "Run", disabled = props.disabled, busy = props.busy, onClick = function() ran = ran + 1 end }
+      end } },
+      onContextMenu = function() menus = menus + 1 end,
+    })
+    UI.flush()
+    local b = find(root, "Button")[2].region
+    local bl, bb, bw, bh = b:GetRect()
+    W.cursorX, W.cursorY = bl + bw / 2, bb + bh / 2
+    b:_click("RightButton")
+    eq(menus, 1, "the row's menu, once")
+    b:_click("LeftButton")
+    eq(ran, (props.disabled or props.busy) and 0 or 1, "a left click runs only an enabled button")
+    eq(menus, 1)
+    W.cursorX, W.cursorY = -100, -100
+    b:_click("RightButton")
+    eq(menus, (props.disabled or props.busy) and 1 or 2, "a release away from a disabled button is no click")
+    root:unmount()
+  end
+  -- A left click on an item cell without a click of its own selects its row.
+  local picked
+  root = UI.mount(host, UI.Table {
+    items = items, key = "id", rowHeight = 30, onSelect = function(item, i, key) picked = key end,
+    columns = { { key = "item", flex = 1, render = function() return UI.ItemCell { item = 2772 } end } },
+  })
+  UI.flush()
+  find(root, "ItemCell")[2].region:_click("LeftButton")
+  eq(picked, 20, "the row it sits in")
+  root:unmount()
+  -- Without a row menu, a right click stays the control's.
+  local cellClicks = {}
+  root = UI.mount(host, UI.List { items = items, rowHeight = 30,
+    render = function() return UI.HStack { UI.ItemCell { item = 2772, onClick = function(_, _, _, b) cellClicks[#cellClicks + 1] = b end },
+      UI.Pressable { UI.Text { text = "x" } } } end })
+  UI.flush()
+  find(root, "ItemCell")[1].region:_click("RightButton")
+  eq(cellClicks[1], "RightButton")
+  find(root, "Pressable")[1].region:_click("RightButton")
+  root:unmount()
+  find(UI.mount(host, UI.Pressable { UI.Text { text = "alone" } }), "Pressable")[1].region:_click("RightButton")
+end)
+
+test("context menu: nothing under it reacts to the pointer", function()
+  local host = CreateFrame("Frame")
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+  host:SetSize(400, 300)
+  local items = {}
+  for i = 1, 5 do items[i] = { id = i } end
+  local root = UI.mount(host, UI.List { items = items, rowHeight = 30, onContextMenu = function() end,
+    render = function(it) return UI.Text { text = tostring(it.id) } end })
+  UI.flush()
+  local list = find(root, "List")[1]
+  local l, b, w, h = list.region:GetRect()
+  W.cursorX, W.cursorY = l + 50, b + h - 45
+  W.nextFrame()
+  eq(list.hover, 2)
+  GameTooltip:SetOwner(list.region)
+  GameTooltip:Show()
+  UI.showMenu(list.region, { { text = "One" } })
+  local hidden = not GameTooltip:IsOwned(list.region)
+  local blocks = I.menu.catcher:IsMouseEnabled()
+  W.nextFrame()
+  local hover = list.hover
+  UI.hideMenu()
+  ok(hidden, "the item tooltip under it is hidden")
+  ok(blocks, "the catcher takes the pointer")
+  eq(hover, nil, "no row hover under an open menu")
+  W.nextFrame()
+  eq(list.hover, 2)
+  root:unmount()
+end)
+
 test("controls: button variants, hover and press, busy, tooltip; badges; toggles", function()
   local host = CreateFrame("Frame")
   host:SetSize(600, 100)
