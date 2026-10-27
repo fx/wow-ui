@@ -1016,6 +1016,16 @@ test("slider: stops, press and drag, wheel, value text room, disabled", function
   f:_fire("OnMouseDown", "LeftButton")
   f:_fire("OnMouseUp")
   root:unmount()
+  -- At its natural size: label and gap, 120 px for the track, gap, value
+  -- room; the track is that 120 px less a knob.
+  root = UI.mount(UIParent, UI.HStack { UI.Slider { label = "Level", min = 0, max = 10, value = 1 } })
+  UI.flush()
+  node = find(root, "Slider")[1]
+  f = node.region
+  eq(node.w, f.label:GetWidth() + 10 + 120 + 10 + f.valueText:GetWidth(), "natural width")
+  eq(node.h, 20, "natural height")
+  eq(f.track:GetWidth(), 108, "the track at the natural width")
+  root:unmount()
   W.cursorX, W.cursorY = -100, -100
 end)
 
