@@ -5,7 +5,7 @@
 A scrolled list keeps what is being read in place while its items change: a table with a row-key function no longer remounts (and jumps to the top) on every render, and rows added above the view no longer push it down.
 
 **Spec:** [Data components](../specs/data-components/#list), [Rendering](../specs/rendering/)
-**Status:** in-progress
+**Status:** complete
 **Depends On:** 0008
 
 ## Motivation

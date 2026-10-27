@@ -101,5 +101,5 @@ changes:
     path: changes/0009-scroll-anchoring.md
     description: Function keys are props, not identities; a scrolled keyed list keeps its top row in place when items change
     spec: data-components
-    status: in-progress
+    status: complete
     depends_on: ["0008"]
