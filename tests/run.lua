@@ -1070,6 +1070,40 @@ test("slider: a drag notifies once per stop, ends on the left button, stops when
   W.cursorX, W.cursorY = -100, -100
 end)
 
+test("tooltip: drawn in its owner's theme", function()
+  local inline = { name = "t-tip-inline", colors = { muted = "#00FF00" } }
+  UI.registerTheme({ name = "t-tip-tree", base = "default", colors = { muted = "#0000FF" } })
+  local host = CreateFrame("Frame", nil, UIParent)
+  host:SetSize(300, 50)
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 100, -300)
+  local root = UI.mount(host, UI.HStack { gap = 8,
+    UI.Help { title = "Tree", text = "The tree's theme" },
+    UI.Help { title = "Own", text = "Its own theme", theme = inline },
+  }, { theme = "t-tip-tree" })
+  local plain = UI.mount(CreateFrame("Frame", nil, UIParent), UI.Help { title = "Global", text = "The global theme" })
+  UI.flush()
+  local helps = find(root, "Help")
+  local tip = I.tooltip
+  local function muted()
+    local texts = find(tip.root, "Text")
+    return texts[#texts].region._color
+  end
+  helps[1].region:_fire("OnEnter")
+  ok(find(tip.root, "VStack")[1].theme == I.resolve("t-tip-tree"), "the mount's theme")
+  ok(math.abs(muted()[3] - 1) < 0.001 and muted()[2] < 0.001, "text in the mount's muted")
+  helps[1].region:_fire("OnLeave")
+  helps[2].region:_fire("OnEnter")
+  ok(find(tip.root, "VStack")[1].theme == I.resolve(inline), "the element's own theme")
+  ok(math.abs(muted()[2] - 1) < 0.001 and muted()[3] < 0.001, "text in the element's muted")
+  helps[2].region:_fire("OnLeave")
+  find(plain, "Help")[1].region:_fire("OnEnter")
+  eq(find(tip.root, "VStack")[1].theme, nil, "back to the global theme")
+  ok(math.abs(muted()[1] - I.resolve("default").muted.r) < 0.001, "text in the global muted")
+  UI.hideTooltip()
+  root:unmount()
+  plain:unmount()
+end)
+
 test("tooltip and help: themed, sized to content, above or below its owner, one owner at a time", function()
   local host = CreateFrame("Frame", nil, UIParent)
   host:SetSize(400, 100)

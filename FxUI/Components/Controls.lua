@@ -28,19 +28,23 @@ local TT = I.tooltip
 
 -- Show FxUI's tooltip for `owner`: `spec` is text, or { title, text,
 -- maxWidth }. It sits above the owner, or below when there is no room
--- above, sized to its content, in the active theme's `tooltip` surface.
+-- above, sized to its content, in the `tooltip` surface of the owner's
+-- theme (the theme of the FxUI element the owner is, else the global one).
 function UI.showTooltip(owner, spec)
   if type(spec) ~= "table" then spec = { text = spec } end
   if (not spec.title or spec.title == "") and (not spec.text or spec.text == "") then return end
+  local node = owner and owner.fxNode
+  local el = TooltipView({ title = spec.title, text = spec.text, maxWidth = spec.maxWidth,
+    theme = node and node.alive and node.theme or nil })
   if not TT.host then
     local host = CreateFrame("Frame", nil, UIParent)
     host:SetFrameStrata("TOOLTIP")
     host:SetClampedToScreen(true)
     I.followScale(host, false)
     TT.host = host
-    TT.root = UI.mount(host, TooltipView(spec))
+    TT.root = UI.mount(host, el)
   else
-    TT.root:update(TooltipView(spec))
+    TT.root:update(el)
   end
   local host = TT.host
   local w, h = I.measure(TT.root.node, spec.maxWidth or TOOLTIP_MAX_W, 2000)

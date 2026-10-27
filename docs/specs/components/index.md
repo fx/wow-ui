@@ -69,7 +69,7 @@ This spec owns the behaviour of FxUI's general-purpose components: text primitiv
 
 ### Tooltip
 
-- `UI.showTooltip(owner, spec)` MUST show FxUI's own tooltip for a frame: `spec` is text or `{ title, text, maxWidth }`; the title in the `strong` font, the text wrapped, muted under a title, in the active theme's `tooltip` surface.
+- `UI.showTooltip(owner, spec)` MUST show FxUI's own tooltip for a frame: `spec` is text or `{ title, text, maxWidth }`; the title in the `strong` font, the text wrapped, muted under a title, in the `tooltip` surface of its owner's theme: the [theme that applies](../theming/#which-theme-applies) to the FxUI element the owner frame is, else the global theme, taken again each time it is shown.
 - It MUST be sized to its content, at most `maxWidth` (default 260) wide, and sit centred above its owner, or below it when there is no room above; it stays on screen.
 - There MUST be one tooltip: showing it for another owner moves it there. `UI.hideTooltip(owner)` MUST hide it only while that owner shows it (any owner when nil); `UI.tooltipOwner()` MUST return the frame it is shown for, or nil.
 - A spec without title or text MUST show nothing.
