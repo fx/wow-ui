@@ -46,7 +46,7 @@ FxUI renders declaratively: a consumer describes UI as a tree of elements (plain
 ### Reconciliation
 
 - Re-rendering MUST update existing nodes in place when the new element has the same type and key as the old one at that position, and MUST create a new node otherwise, releasing the old one.
-- A child's key is its `key` prop when given, otherwise its index; children with a `key` keep their node when they move.
+- A child's key is its `key` prop when it is a string or number, otherwise its index; children with a `key` keep their node when they move. A `key` of any other type (a list's row-key function, a new closure every render) is only a prop and MUST NOT change the child's identity.
 - Re-rendering MUST NOT create regions for nodes it updates in place.
 - An element's `ref` prop, a function, MUST be called with the element's client region when the node is created.
 
@@ -123,3 +123,4 @@ None.
 | Date | Change | Document |
 |------|--------|----------|
 | 2026-10-26 | Initial spec created from the implementation (previously part of the architecture spec) | [0001-fxui-core](../../changes/0001-fxui-core.md) |
+| 2026-10-27 | Only a string or number `key` is an identity; a function `key` is a prop | [0009-scroll-anchoring](../../changes/0009-scroll-anchoring.md) |

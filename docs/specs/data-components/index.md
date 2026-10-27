@@ -51,6 +51,7 @@ This spec owns the behaviour of FxUI's data-oriented components: money, item cel
 - `empty` (text) MUST show centred when there are no items.
 - `rowPadding` sets each row's padding (default `{ 0, 12 }`); `visibleRows` (default 8) sets the natural height.
 - `UI.scrollListTo(frame, i)` MUST scroll a mounted list (by its region) so row `i` is at the top, clamped.
+- **Scroll anchoring.** When a keyed list's items change while it is scrolled, the row at the top of the view MUST keep its place when it is still among the items: rows added or removed above it move the offset, not the view. A list at the top MUST stay at the top, so new rows show; a list keyed by index anchors nothing.
 
 #### Scenario: Large list
 
@@ -170,3 +171,4 @@ A Table renders a header `HStack` of `UI.HeaderCell`s (its right padding include
 | 2026-10-26 | Initial spec created from the implementation | [0001-fxui-core](../../changes/0001-fxui-core.md) |
 | 2026-10-26 | Row right-clicks: `onContextMenu` | [0007-context-menu](../../changes/0007-context-menu.md) |
 | 2026-10-26 | An item cell without its own click selects its list row | [0008-toggle-group](../../changes/0008-toggle-group.md) |
+| 2026-10-27 | Scroll anchoring: a scrolled keyed list keeps its top row in place when items change | [0009-scroll-anchoring](../../changes/0009-scroll-anchoring.md) |
