@@ -2,7 +2,7 @@
 
 ## Overview
 
-This spec owns the behaviour of FxUI's general-purpose components: text primitives, buttons (including protected clicks), badges, toggles, tabs, windows and toasts. Data-oriented components (money, item cells, meters, lists, tables, charts, legends) are owned by [data components](../data-components/). How they are laid out is owned by [layout](../layout/); every color, font, metric and skin they draw with comes from the active theme ([theming](../theming/), [theme tokens](../theme-tokens/)).
+This spec owns the behaviour of FxUI's general-purpose components: text primitives, buttons (including protected clicks), badges, toggles, sliders, tooltips and help icons, tabs, windows and toasts. Data-oriented components (money, item cells, meters, lists, tables, charts, legends) are owned by [data components](../data-components/). How they are laid out is owned by [layout](../layout/); every color, font, metric and skin they draw with comes from the active theme ([theming](../theming/), [theme tokens](../theme-tokens/)).
 
 ## Background
 
@@ -23,7 +23,7 @@ This spec owns the behaviour of FxUI's general-purpose components: text primitiv
 - `UI.Button` MUST accept `text`, `variant` (`primary` · `secondary` · `danger` · `ghost`; default `secondary`), `size` (`sm` · `md` · `lg`; default `md`), `onClick(frame, mouseButton)`, `disabled`, `busy` and `tooltip`, and react to left and right clicks.
 - `busy = true` MUST disable the button; `busy = "<text>"` MUST also replace its label with that text.
 - A disabled button MUST look disabled and MUST NOT call `onClick`.
-- Hovering MUST show `tooltip` (when given) and a hover state; pressing MUST show a pressed state.
+- Hovering MUST show `tooltip` (when given) in FxUI's [tooltip](#tooltip) and a hover state; pressing MUST show a pressed state.
 - A button's width MUST be its label's width plus the size's padding on both sides; its height is the size's height (default theme: `sm` 24, `md` 30, `lg` 40 px).
 
 #### Scenario: Busy button
@@ -51,6 +51,40 @@ This spec owns the behaviour of FxUI's general-purpose components: text primitiv
 
 - `UI.Toggle` MUST draw a labelled on/off control from `checked` and `label`, call `onChange(not checked)` when clicked, and do nothing when `disabled` (drawn faded).
 - A Toggle MUST NOT change its own state; the consumer passes the new `checked`.
+
+### Slider
+
+- `UI.Slider` MUST draw a labelled horizontal track with a fill and a knob at `value`, and the value as text at its end (`format(value)`, default `tostring`), in `tone` (default `gold`) for the fill.
+- It MUST move between stops: `values` (an ascending list) when given, else `min` to `max` by `step` (default 1; a step of 0 or less is 1; a `max` below `min` is `min`). There MUST be at most 1,000 stops: a range that would need more steps by the smallest whole multiple of `step` that keeps it to 1,000, and the last stop is always `max`. Stops are evenly spaced along the track, so a list of stops can make a range that grows faster than linearly. A `value` between stops shows at the nearest one.
+- Pressing on the slider MUST move to the stop under the cursor, dragging MUST follow it until the left button is released, and the wheel MUST move one stop up or down, stopping at the ends. Each of these MUST call `onChange(stop)` once each time the stop changes, and never when it stays the same: a press and the wheel compare with the stop `value` shows, a drag with the last stop it reached, so a consumer that has not taken the new value yet is not called again while the cursor rests; only the left button acts.
+- A Slider MUST NOT change its own value; the consumer passes the new `value`.
+- `disabled` MUST draw it faded and ignore the mouse; becoming disabled during a drag MUST end the drag. `tooltip` MUST show on hover in FxUI's [tooltip](#tooltip), and unmounting the slider (its frame released to the pool) MUST hide it. Releasing the mouse button after a drag does not hide it while the cursor is still over the slider, as with a button.
+- Room for the widest value text MUST be reserved (every stop measured when there are at most 64, else the first and last), so the track does not move as the value changes. Its natural width is the label and a 10 px gap (when it has a label), 120 px for the track, a 10 px gap and that room, and its natural height 20 px. The track is the width left for it less one knob (12 px), half a knob at each end keeping the knob inside, so at the natural width it is 108 px.
+
+#### Scenario: Drag to the end
+
+- **GIVEN** a slider with stops 0, 1, 5, 10, 50 and 100 at 5
+- **WHEN** the player presses at the start of the track, drags past its end and releases
+- **THEN** `onChange` receives 0 and then 100, once each, and nothing more until the stop changes again
+
+### Tooltip
+
+- `UI.showTooltip(owner, spec)` MUST show FxUI's own tooltip for a frame: `spec` is text or `{ title, text, maxWidth }`; the title in the `strong` font, the text wrapped, muted under a title, in the `tooltip` surface of its owner's theme: the [theme that applies](../theming/#which-theme-applies) to the FxUI element the owner frame is, else the global theme, taken again each time it is shown.
+- It MUST be sized to its content, at most `maxWidth` (default 260) wide, and sit centred above its owner, or below it when there is no room above; it stays on screen.
+- There MUST be one tooltip: showing it for another owner moves it there. `UI.hideTooltip(owner)` MUST hide it only while that owner shows it (any owner when nil); `UI.tooltipOwner()` MUST return the frame it is shown for, or nil.
+- A spec without title or text MUST show nothing.
+- Item tooltips stay the client's (see [data components: item cell](../data-components/#item-cell)).
+
+### Help
+
+- `UI.Help` MUST draw a small `?` mark in a circle (`size`, default 14 px, or the theme's `metrics.Help.size`), brighter on hover, and on hover show its `title` and `text` in the [tooltip](#tooltip) (with `maxWidth`); leaving or releasing it MUST hide the tooltip.
+- It is the place for explanations a screen would otherwise spell out in a line of text.
+
+#### Scenario: Explain the columns
+
+- **GIVEN** a table header with a help icon whose text explains the columns
+- **WHEN** the player hovers the icon
+- **THEN** the tooltip shows that text, above the icon, and hides when the cursor leaves
 
 ### Tabs
 
@@ -134,6 +168,8 @@ Each component publishes what a skin receives ([theming](../theming/) owns the s
 | Button | `paint(button, props, state)` | `state = { hover, pressed, enabled, size }`; `button.label` |
 | Badge | `paint(frame, props, toneToken)` | `frame.label` with text set |
 | Toggle | `paint(button, props, state)` | `state = { hover, checked, enabled }`; `button.track`, `.knob`, `.label` |
+| Help | `paint(frame, props, state)` | `state = { hover }`; `frame.circle`, `.mark` |
+| Slider | `paint(frame, props, state)` | `state = { hover, dragging, enabled, fraction }`; `frame.track`, `.fill`, `.knob`, `.label`, `.valueText` (FxUI places the knob and sizes the fill) |
 | Tab | `paint(button, props, state)`, `paintRail(segment)`, `railGap(tabButton)` | `state = { hover, selected }`; `button.label`, `.count`, `.underline` |
 | Window | `paint(frame, props, size)`, `paintClose(button, hover)`, `paintFooter(footer)` | `frame.header`, `.title`, `.headerFoot`, `.headerLine`, `.grip` |
 | Scroll | `paintThumb(thumb, hot)` | `thumb.tex`, `.track`, `.axis` |
@@ -161,3 +197,5 @@ The toast stack is an FxUI tree mounted once, on first use, in a `DIALOG`-strata
 | Date | Change | Document |
 |------|--------|----------|
 | 2026-10-26 | Initial spec created from the implementation (the planned component table previously in the architecture spec) | [0001-fxui-core](../../changes/0001-fxui-core.md) |
+| 2026-10-26 | Slider | [0004-slider](../../changes/0004-slider.md) |
+| 2026-10-26 | Tooltip and help icon; buttons and sliders use the tooltip | [0005-tooltip-help](../../changes/0005-tooltip-help.md) |

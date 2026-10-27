@@ -5,16 +5,145 @@ local I = UI._internal
 
 local WHITE, BLACK = "#FFFFFF", "#000000"
 
-local function showTooltip(frame, text)
-  if not text or text == "" then return end
-  GameTooltip:SetOwner(frame, "ANCHOR_TOP")
-  GameTooltip:SetText(text, 1, 1, 1, 1, true)
-  GameTooltip:Show()
+---------------------------------------------------------------------------
+-- Tooltip
+---------------------------------------------------------------------------
+
+local TOOLTIP_MAX_W, TOOLTIP_GAP = 260, 6
+
+local TooltipView = I.defineComponent("FxTooltip", function(props)
+  local body = { gap = 4, padding = { 8, 10 }, surface = "tooltip", maxWidth = props.maxWidth or TOOLTIP_MAX_W }
+  local titled = props.title ~= nil and props.title ~= ""
+  if titled then
+    body[#body + 1] = UI.Text { text = props.title, style = "strong", wrap = true }
+  end
+  if props.text and props.text ~= "" then
+    body[#body + 1] = UI.Text { text = props.text, color = titled and "muted" or "text", wrap = true }
+  end
+  return UI.VStack(body)
+end)
+
+-- One tooltip for every copy of the library: an upgrade keeps it.
+I.tooltip = I.tooltip or {}
+local TT = I.tooltip
+
+-- Show FxUI's tooltip for `owner`: `spec` is text, or { title, text,
+-- maxWidth }. It sits above the owner, or below when there is no room
+-- above, sized to its content, in the `tooltip` surface of the owner's
+-- theme (the theme of the FxUI element the owner is, else the global one).
+function UI.showTooltip(owner, spec)
+  if type(spec) ~= "table" then spec = { text = spec } end
+  if (not spec.title or spec.title == "") and (not spec.text or spec.text == "") then return end
+  local node = owner and owner.fxNode
+  local el = TooltipView({ title = spec.title, text = spec.text, maxWidth = spec.maxWidth,
+    theme = node and node.alive and node.theme or nil })
+  if not TT.host then
+    local host = CreateFrame("Frame", nil, UIParent)
+    host:SetFrameStrata("TOOLTIP")
+    host:SetClampedToScreen(true)
+    I.followScale(host, false)
+    TT.host = host
+    TT.root = UI.mount(host, el)
+  else
+    TT.root:update(el)
+  end
+  local host = TT.host
+  local w, h = I.measure(TT.root.node, spec.maxWidth or TOOLTIP_MAX_W, 2000)
+  host:SetSize(w, h)
+  TT.root:layout()
+  host:ClearAllPoints()
+  -- Below the owner when the tooltip would not fit above it.
+  local top = owner:GetTop()
+  local room = top and UIParent:GetTop() and (UIParent:GetTop() * UIParent:GetEffectiveScale() - top * owner:GetEffectiveScale())
+  if room and room < (h + TOOLTIP_GAP) * host:GetEffectiveScale() then
+    host:SetPoint("TOP", owner, "BOTTOM", 0, -TOOLTIP_GAP)
+  else
+    host:SetPoint("BOTTOM", owner, "TOP", 0, TOOLTIP_GAP)
+  end
+  host:Show()
+  TT.owner = owner
 end
 
-local function hideTooltip(frame)
-  if GameTooltip:IsOwned(frame) then GameTooltip:Hide() end
+-- Hide the tooltip when `owner` shows it (any owner when nil).
+function UI.hideTooltip(owner)
+  if TT.host and (owner == nil or TT.owner == owner) then
+    TT.host:Hide()
+    TT.owner = nil
+  end
 end
+
+-- The frame the tooltip is shown for, or nil while it is hidden.
+function UI.tooltipOwner()
+  return TT.host and TT.host:IsShown() and TT.owner or nil
+end
+
+local function showTooltip(frame, text) UI.showTooltip(frame, text) end
+local function hideTooltip(frame) UI.hideTooltip(frame) end
+
+---------------------------------------------------------------------------
+-- Help: a small "?" that explains something in a tooltip
+---------------------------------------------------------------------------
+
+local HELP_SIZE = 14
+
+-- Skin contract: skins.Help.paint(frame, props, state) with state =
+-- { hover }; frame.circle and .mark exist. metrics.Help.size (14).
+local function paintHelp(f)
+  local node = f.fxNode
+  if not node then return end
+  local prevTheme = I.enter(node)
+  local skin = I.skin("Help")
+  if skin and skin.paint then
+    skin.paint(f, node.el.props, { hover = f.fxHover })
+  else
+    I.clearSkin(f)
+    f.circle:Show()
+    f.mark:Show()
+    f.circle:SetVertexColor(I.rgba(f.fxHover and "muted" or "line"))
+    f.mark:SetTextColor(I.rgba(f.fxHover and "text" or "muted"))
+  end
+  I.leave(prevTheme)
+end
+
+-- Props: text, title, maxWidth (the tooltip's); size.
+I.defineHost("Help", {
+  create = function(holder)
+    local f = CreateFrame("Frame", nil, holder)
+    f:EnableMouse(true)
+    f.circle = f:CreateTexture(nil, "ARTWORK")
+    f.circle:SetAllPoints()
+    I.setFile(f.circle, "Circle.tga")
+    f.mark = f:CreateFontString(nil, "OVERLAY")
+    f.mark:SetPoint("CENTER", 0, 0)
+    f:SetScript("OnEnter", function(self)
+      self.fxHover = true
+      paintHelp(self)
+      local node = self.fxNode
+      if node then
+        local p = node.el.props
+        UI.showTooltip(self, { title = p.title, text = p.text, maxWidth = p.maxWidth })
+      end
+    end)
+    f:SetScript("OnLeave", function(self)
+      self.fxHover = false
+      paintHelp(self)
+      UI.hideTooltip(self)
+    end)
+    return f
+  end,
+  update = function(node)
+    I.setText(node.region.mark, "?", "label", "muted")
+    paintHelp(node.region)
+  end,
+  measure = function(node)
+    local s = node.el.props.size or I.metrics("Help").size or HELP_SIZE
+    return s, s
+  end,
+  release = function(node)
+    node.region.fxHover = false
+    UI.hideTooltip(node.region)
+  end,
+})
 
 ---------------------------------------------------------------------------
 -- Button
@@ -280,6 +409,236 @@ I.defineHost("Toggle", {
   end,
   release = function(node)
     node.region.fxHover = false
+  end,
+})
+
+---------------------------------------------------------------------------
+-- Slider
+---------------------------------------------------------------------------
+
+local SLIDER_TRACK_H, SLIDER_KNOB, SLIDER_GAP, SLIDER_TRACK_W = 4, 12, 10, 120
+
+local SLIDER_MAX_STOPS = 1000
+
+-- The stops a slider moves between: `values` as given, or min to max by
+-- step. A range that would need more than 1,000 stops steps by the
+-- smallest whole multiple of `step` that keeps it to 1,000.
+local function sliderStops(p)
+  if type(p.values) == "table" and #p.values > 0 then return p.values end
+  local lo, hi = tonumber(p.min) or 0, tonumber(p.max) or 1
+  local step = tonumber(p.step) or 1
+  if step <= 0 then step = 1 end
+  if hi < lo then hi = lo end
+  step = step * math.max(math.ceil((hi - lo) / ((SLIDER_MAX_STOPS - 1) * step) - 1e-9), 1)
+  local out, i = {}, 0
+  while lo + i * step < hi - step * 1e-6 do
+    out[#out + 1] = lo + i * step
+    i = i + 1
+  end
+  out[#out + 1] = hi
+  return out
+end
+
+-- Index of the stop nearest `value` (the first of equals).
+local function sliderIndex(stops, value)
+  value = tonumber(value) or stops[1]
+  local best, bestD = 1, math.huge
+  for i, s in ipairs(stops) do
+    local d = math.abs(s - value)
+    if d < bestD then best, bestD = i, d end
+  end
+  return best
+end
+
+local function sliderText(p, v)
+  if p.format then return tostring(p.format(v)) end
+  return tostring(v)
+end
+
+-- Skin contract: skins.Slider.paint(frame, props, state) with state =
+-- { hover, dragging, enabled, fraction }; frame.track, .fill, .knob, .label,
+-- .valueText exist (hide what the skin does not use; the knob's position is
+-- FxUI's).
+local function paintSlider(f)
+  local node = f.fxNode
+  if not node or not f.fxStops then return end
+  local prevTheme = I.enter(node)
+  local p = node.el.props
+  local n = #f.fxStops
+  local frac = n > 1 and (sliderIndex(f.fxStops, p.value) - 1) / (n - 1) or 0
+  local tw = f.track:GetWidth()
+  f.fill:SetWidth(math.max(frac * tw, 0.01))
+  f.knob:ClearAllPoints()
+  f.knob:SetPoint("CENTER", f.track, "LEFT", frac * tw, 0)
+  local skin = I.skin("Slider")
+  if skin and skin.paint then
+    skin.paint(f, p, { hover = f.fxHover, dragging = f.fxDrag, enabled = not p.disabled, fraction = frac })
+  else
+    I.clearSkin(f)
+    f.track:Show()
+    f.fill:Show()
+    f.knob:Show()
+    local hot = (f.fxHover or f.fxDrag) and not p.disabled
+    f.track:SetVertexColor(I.rgba("line"))
+    f.fill:SetVertexColor(I.rgba(p.tone or "gold"))
+    f.knob:SetVertexColor(I.rgba(hot and I.mix("text", WHITE, 0.2) or "text"))
+    f:SetAlpha(p.disabled and 0.5 or 1)
+  end
+  I.leave(prevTheme)
+end
+
+-- The stop under the cursor's x.
+local function sliderAt(f)
+  local left = f.track:GetLeft()
+  local tw = f.track:GetWidth()
+  local n = #f.fxStops
+  if not left or tw <= 0 or n < 2 then return 1 end
+  local cx = GetCursorPosition()
+  cx = cx / f:GetEffectiveScale()
+  local frac = math.min(math.max((cx - left) / tw, 0), 1)
+  return math.floor(frac * (n - 1) + 0.5) + 1
+end
+
+-- Move to stop i; onChange only when the stop changes: from the value
+-- shown, or for the drag (`drag` true) from the last stop it reached, so a
+-- consumer that has not taken the value yet hears of each stop once. Only
+-- the drag reads or moves that stop; the wheel steps from the value shown.
+local function sliderSet(f, i, drag)
+  local node = f.fxNode
+  if not node then return end
+  local p = node.el.props
+  local stops = f.fxStops
+  i = math.min(math.max(i, 1), #stops)
+  local from = drag and f.fxDragStop or sliderIndex(stops, p.value)
+  if drag then f.fxDragStop = i end
+  if i == from then return end
+  if p.onChange then p.onChange(stops[i]) end
+end
+
+local function sliderEndDrag(f)
+  f.fxDrag, f.fxDragStop = nil, nil
+  f:SetScript("OnUpdate", nil)
+end
+
+local function sliderDrag(f)
+  local node = f.fxNode
+  if not f.fxDrag or not node or node.el.props.disabled then
+    sliderEndDrag(f)
+    paintSlider(f)
+    return
+  end
+  sliderSet(f, sliderAt(f), true)
+end
+
+-- The label's width with its gap, and room for the widest value, so the
+-- track does not move as the value changes.
+local function sliderWidths(node)
+  local f = node.region
+  local p = node.el.props
+  local labelW = (p.label and p.label ~= "") and (I.measureString(f.label) + SLIDER_GAP) or 0
+  local shown = f.valueText:GetText()
+  local valueW = 0
+  local stops = f.fxStops
+  local probe = #stops <= 64 and stops or { stops[1], stops[#stops] }
+  for _, v in ipairs(probe) do
+    f.valueText:SetText(sliderText(p, v))
+    valueW = math.max(valueW, I.measureString(f.valueText))
+  end
+  f.valueText:SetText(shown)
+  return labelW, valueW
+end
+
+-- Props: value, min, max, step (default 1) or values (ascending stops),
+-- onChange(value), label, format(value) -> text, tone (fill color),
+-- disabled, tooltip.
+I.defineHost("Slider", {
+  create = function(holder)
+    local f = CreateFrame("Frame", nil, holder)
+    f:EnableMouse(true)
+    f:EnableMouseWheel(true)
+    f.label = f:CreateFontString(nil, "OVERLAY")
+    f.label:SetWordWrap(false)
+    f.valueText = f:CreateFontString(nil, "OVERLAY")
+    f.valueText:SetWordWrap(false)
+    f.track = f:CreateTexture(nil, "BACKGROUND")
+    f.track:SetHeight(SLIDER_TRACK_H)
+    I.setShape(f.track, 2, false)
+    if not f.track.fxShape then f.track:SetColorTexture(1, 1, 1, 1) end
+    f.fill = f:CreateTexture(nil, "BORDER")
+    f.fill:SetHeight(SLIDER_TRACK_H)
+    f.fill:SetPoint("LEFT", f.track, "LEFT", 0, 0)
+    I.setShape(f.fill, 2, false)
+    if not f.fill.fxShape then f.fill:SetColorTexture(1, 1, 1, 1) end
+    f.knob = f:CreateTexture(nil, "ARTWORK")
+    f.knob:SetSize(SLIDER_KNOB, SLIDER_KNOB)
+    I.setFile(f.knob, "Circle.tga")
+    f:SetScript("OnEnter", function(self)
+      self.fxHover = true
+      paintSlider(self)
+      local node = self.fxNode
+      if node then showTooltip(self, node.el.props.tooltip) end
+    end)
+    f:SetScript("OnLeave", function(self)
+      self.fxHover = false
+      paintSlider(self)
+      hideTooltip(self)
+    end)
+    f:SetScript("OnMouseDown", function(self, button)
+      local node = self.fxNode
+      if not node or node.el.props.disabled or (button and button ~= "LeftButton") then return end
+      self.fxDrag = true
+      sliderSet(self, sliderAt(self), true)
+      paintSlider(self)
+      self:SetScript("OnUpdate", sliderDrag)
+    end)
+    f:SetScript("OnMouseUp", function(self, button)
+      if button and button ~= "LeftButton" then return end
+      sliderEndDrag(self)
+      paintSlider(self)
+    end)
+    f:SetScript("OnMouseWheel", function(self, delta)
+      local node = self.fxNode
+      if not node or node.el.props.disabled then return end
+      sliderSet(self, sliderIndex(self.fxStops, node.el.props.value) + (delta > 0 and 1 or -1))
+    end)
+    return f
+  end,
+  update = function(node, p)
+    local f = node.region
+    f.fxStops = sliderStops(p)
+    if p.disabled and f.fxDrag then sliderEndDrag(f) end
+    I.setText(f.label, p.label, "body", "text")
+    f.label:SetShown(p.label ~= nil and p.label ~= "")
+    I.setText(f.valueText, sliderText(p, f.fxStops[sliderIndex(f.fxStops, p.value)]), "mono", "text")
+    f.valueText:SetJustifyH("RIGHT")
+    paintSlider(f)
+  end,
+  measure = function(node)
+    local labelW, valueW = sliderWidths(node)
+    return labelW + SLIDER_TRACK_W + SLIDER_GAP + valueW, 20
+  end,
+  layout = function(node, w, h)
+    local f = node.region
+    local labelW, valueW = sliderWidths(node)
+    f.label:ClearAllPoints()
+    f.label:SetPoint("LEFT", f, "LEFT", 0, 0)
+    f.label:SetSize(math.max(labelW - SLIDER_GAP, 0), h)
+    f.valueText:ClearAllPoints()
+    f.valueText:SetPoint("RIGHT", f, "RIGHT", 0, 0)
+    f.valueText:SetSize(valueW, h)
+    -- Half a knob of room at each end, so the knob stays inside.
+    local half = SLIDER_KNOB / 2
+    local tw = math.max(w - labelW - valueW - SLIDER_GAP - SLIDER_KNOB, 1)
+    f.track:ClearAllPoints()
+    f.track:SetPoint("LEFT", f, "LEFT", labelW + half, 0)
+    f.track:SetWidth(tw)
+    paintSlider(f)
+  end,
+  release = function(node)
+    local f = node.region
+    f.fxHover = false
+    sliderEndDrag(f)
+    hideTooltip(f)
   end,
 })
 

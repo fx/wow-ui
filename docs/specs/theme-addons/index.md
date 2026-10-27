@@ -55,7 +55,7 @@ Classic MUST draw each component with client art as follows, keeping the behavio
 | Item cell | A square icon in the quality-tinted icon frame |
 | Scrollbar | An 18 px gutter with the fixed 16 × 24 scroll knob, never stretched, on a faint dark track |
 | Chart tags | Tooltip frames; the last-price tag bordered and lettered in its tone on black |
-| Cards, toasts, insets | Tooltip-style backdrops |
+| Cards, toasts, tooltips, insets | Tooltip-style backdrops |
 
 #### Scenario: Classic window and table
 

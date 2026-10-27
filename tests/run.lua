@@ -710,6 +710,8 @@ test("themes: a skinned theme draws every component; pooled regions are clean af
       Button = { paint = mark("Button") },
       Badge = { paint = mark("Badge") },
       Toggle = { paint = mark("Toggle") },
+      Slider = { paint = mark("Slider") },
+      Help = { paint = mark("Help") },
       Tab = { paint = mark("Tab"), paintRail = mark("TabRail"), railGap = function(b) return b:GetLeft(), b:GetRight() end },
       ItemCell = { paintIcon = mark("ItemCell") },
       Meter = { paint = mark("Meter") },
@@ -725,6 +727,8 @@ test("themes: a skinned theme draws every component; pooled regions are clean af
   local function view(theme)
     return UI.Window { title = "Skinned", width = 500, height = 600, theme = theme, status = "s", footer = { UI.Text { text = "f" } },
       UI.HStack { gap = 4, UI.Button { text = "Go" }, UI.Badge { text = "B" }, UI.Toggle { label = "On", checked = true } },
+      UI.Slider { label = "Level", min = 0, max = 10, value = 3 },
+      UI.Help { text = "Explains" },
       UI.TabBar { tabs = { { id = "x", text = "One" }, { id = "y", text = "Two" } }, selected = "x" },
       UI.ItemCell { item = 17 },
       UI.Meter { value = 5, max = 10, label = "Fill", valueText = "5/10" },
@@ -735,7 +739,7 @@ test("themes: a skinned theme draws every component; pooled regions are clean af
     }
   end
   local root = UI.mount(UIParent, view("t-skin"))
-  for _, name in ipairs({ "Button", "Badge", "Toggle", "Tab", "TabRail", "ItemCell", "Meter", "Chart", "List", "HeaderCell", "Scroll", "Window", "WindowClose", "WindowFooter" }) do
+  for _, name in ipairs({ "Button", "Badge", "Toggle", "Slider", "Help", "Tab", "TabRail", "ItemCell", "Meter", "Chart", "List", "HeaderCell", "Scroll", "Window", "WindowClose", "WindowFooter" }) do
     ok(painted[name], name .. " painted by the skin")
   end
   local card = find(root, "VStack", function(n) return n.el.props.surface == "card" end)[1].region
@@ -752,6 +756,10 @@ test("themes: a skinned theme draws every component; pooled regions are clean af
   ok(button.fxBg and button.fxBg:IsShown(), "default background back")
   local toggle = find(root, "Toggle")[1].region
   ok(not toggle.fxSkinTex.Toggle:IsShown() and toggle.track:IsShown(), "default toggle track back")
+  local help = find(root, "Help")[1].region
+  ok(not help.fxSkinTex.Help:IsShown() and help.circle:IsShown() and help.mark:IsShown(), "default help back")
+  local slider = find(root, "Slider")[1].region
+  ok(not slider.fxSkinTex.Slider:IsShown() and slider.track:IsShown() and slider.knob:IsShown(), "default slider track back")
   card = find(root, "VStack", function(n) return n.el.props.surface == "card" end)[1].region
   ok(not card.fxHasBackdrop and card.fxBg:IsShown(), "default card surface back")
   local win = find(root, "Window")[1].region
@@ -901,6 +909,288 @@ test("meter and sparkline: fill, labels, lines and the reference", function()
   root:unmount()
 end)
 
+-- A slider that keeps the value it is given, like a consumer would.
+local function sliderView(props)
+  return UI.component("SliderHost", {
+    init = function(ctx) ctx.state.value = props.value end,
+    render = function(_, ctx)
+      local p = {}
+      for k, v in pairs(props) do p[k] = v end
+      p.value = ctx.state.value
+      p.onChange = function(v)
+        props.changes[#props.changes + 1] = v
+        ctx:setState({ value = v })
+      end
+      return UI.HStack { width = 300, p.slider ~= false and UI.Slider(p) or nil }
+    end,
+  })
+end
+
+test("slider: stops, press and drag, wheel, value text room, disabled", function()
+  local changes = {}
+  local money = function(v) return v .. "g" end
+  local root = UI.mount(UIParent, sliderView({ label = "Min", values = { 0, 1, 5, 10, 50, 100 }, value = 5, format = money,
+    tooltip = "Hide below", changes = changes }) {})
+  UI.flush()
+  local node = find(root, "Slider")[1]
+  local f = node.region
+  eq(f.valueText:GetText(), "5g", "the value, formatted")
+  ok(f:IsMouseWheelEnabled(), "takes the wheel")
+  eq(f.label:GetText(), "Min")
+  local left, tw = f.track:GetLeft(), f.track:GetWidth()
+  ok(tw > 0, "a track")
+  -- The knob sits at the stop's share of the track: 5 is stop 3 of 6.
+  local kl, _, kw = f.knob:GetRect()
+  eq(kl + kw / 2, left + tw * 2 / 5, "knob at 2/5")
+  -- Room for the widest value whatever is shown.
+  local wide = f.valueText:GetWidth()
+  -- Press at the left end: the first stop; drag past the right end: the last.
+  local scale = f:GetEffectiveScale()
+  W.cursorX, W.cursorY = (left - 20) * scale, 0
+  f:_fire("OnEnter")
+  ok(UI.tooltipOwner() == f, "its tooltip")
+  f:_fire("OnMouseDown", "LeftButton")
+  UI.flush()
+  eq(changes[#changes], 0, "pressed at the start")
+  W.cursorX = (left + tw + 50) * scale
+  f:GetScript("OnUpdate")(f, 0.016)
+  UI.flush()
+  eq(changes[#changes], 100, "dragged to the end")
+  local n = #changes
+  f:GetScript("OnUpdate")(f, 0.016)
+  eq(#changes, n, "no change while the stop stays")
+  W.cursorX = (left + tw * 0.62) * scale
+  f:GetScript("OnUpdate")(f, 0.016)
+  UI.flush()
+  eq(changes[#changes], 10, "the nearest stop under the cursor")
+  f:_fire("OnMouseUp")
+  eq(f:GetScript("OnUpdate"), nil, "drag ends on release")
+  f:_fire("OnLeave")
+  ok(UI.tooltipOwner() ~= f, "tooltip hidden")
+  eq(f.valueText:GetWidth(), wide, "the value's room does not change")
+  -- The wheel steps one stop, and stops at the ends.
+  f:_fire("OnMouseWheel", 1)
+  UI.flush()
+  eq(changes[#changes], 50)
+  f:_fire("OnMouseWheel", -1)
+  UI.flush()
+  eq(changes[#changes], 10)
+  n = #changes
+  f:_fire("OnMouseDown", "RightButton")
+  eq(#changes, n, "right button ignored")
+  root:unmount()
+
+  -- min, max and step; disabled.
+  changes = {}
+  root = UI.mount(UIParent, sliderView({ min = 0, max = 1, step = 0.25, value = 0.6, disabled = true, changes = changes }) {})
+  UI.flush()
+  f = find(root, "Slider")[1].region
+  eq(#f.fxStops, 5, "0 to 1 by 0.25")
+  eq(f.valueText:GetText(), "0.5", "the nearest stop")
+  eq(f:GetAlpha(), 0.5, "disabled dimmed")
+  f:_fire("OnMouseDown", "LeftButton")
+  f:_fire("OnMouseWheel", 1)
+  eq(#changes, 0, "disabled ignores the mouse")
+  ok(not f.label:IsShown(), "no label")
+  root:unmount()
+
+  -- A range of many stops measures its ends only; a bad step is 1; a
+  -- maximum below the minimum is the minimum.
+  changes = {}
+  root = UI.mount(UIParent, sliderView({ min = 0, max = 5000, step = 0, value = 9999, changes = changes }) {})
+  UI.flush()
+  f = find(root, "Slider")[1].region
+  ok(#f.fxStops <= 1000, "at most 1,000 stops: " .. #f.fxStops)
+  eq(f.fxStops[2], 6, "the step grows to a whole multiple of the step")
+  eq(f.fxStops[#f.fxStops], 5000, "ending at the maximum")
+  eq(f.valueText:GetText(), "5000")
+  root:unmount()
+  root = UI.mount(UIParent, UI.Slider { min = 0, max = 999, value = 0, width = 200, height = 20 })
+  eq(#find(root, "Slider")[1].region.fxStops, 1000, "exactly 1,000 stops keep the step")
+  root:unmount()
+  root = UI.mount(UIParent, UI.Slider { min = 3, max = 1, value = 3, width = 200, height = 20 })
+  UI.flush()
+  f = find(root, "Slider")[1].region
+  eq(#f.fxStops, 1)
+  ok(f.track:GetWidth() > 0, "laid out at a size given in full")
+  f:_fire("OnMouseDown", "LeftButton")
+  f:_fire("OnMouseUp")
+  root:unmount()
+  -- At its natural size: label and gap, 120 px for the track, gap, value
+  -- room; the track is that 120 px less a knob.
+  root = UI.mount(UIParent, UI.HStack { UI.Slider { label = "Level", min = 0, max = 10, value = 1 } })
+  UI.flush()
+  node = find(root, "Slider")[1]
+  f = node.region
+  eq(node.w, f.label:GetWidth() + 10 + 120 + 10 + f.valueText:GetWidth(), "natural width")
+  eq(node.h, 20, "natural height")
+  eq(f.track:GetWidth(), 108, "the track at the natural width")
+  root:unmount()
+  W.cursorX, W.cursorY = -100, -100
+end)
+
+test("slider: a drag notifies once per stop, ends on the left button, stops when disabled; release hides its tooltip", function()
+  local changes = {}
+  -- A consumer that does not take the value (yet): the slider keeps drawing 5.
+  local function view(disabled)
+    return UI.HStack { width = 300, UI.Slider { values = { 0, 1, 5, 10, 50, 100 }, value = 5, disabled = disabled,
+      tooltip = "Explains", onChange = function(v) changes[#changes + 1] = v end } }
+  end
+  local root = UI.mount(UIParent, view(false))
+  UI.flush()
+  local f = find(root, "Slider")[1].region
+  local left, tw = f.track:GetLeft(), f.track:GetWidth()
+  local scale = f:GetEffectiveScale()
+  W.cursorX, W.cursorY = (left + tw * 2 / 5) * scale, 0
+  f:_fire("OnMouseDown", "LeftButton")
+  eq(#changes, 0, "pressed on the stop it shows")
+  W.cursorX = (left + tw + 50) * scale
+  local drag = f:GetScript("OnUpdate")
+  drag(f, 0.016)
+  drag(f, 0.016)
+  drag(f, 0.016)
+  eq(#changes, 1, "once for the new stop, though the value stays 5")
+  eq(changes[1], 100)
+  W.cursorX = (left - 50) * scale
+  drag(f, 0.016)
+  drag(f, 0.016)
+  eq(#changes, 2, "once for the next stop")
+  eq(changes[2], 0)
+  -- The wheel during a drag steps from the shown stop and leaves the drag's
+  -- own tracking alone.
+  W.cursorX = (left + tw / 5) * scale
+  drag(f, 0.016)
+  eq(changes[#changes], 1, "dragged to 1")
+  local n = #changes
+  f:_fire("OnMouseWheel", -1)
+  eq(#changes, n + 1, "wheel down from the shown 5, though the drag is at 1")
+  eq(changes[#changes], 1)
+  f:_fire("OnMouseWheel", 1)
+  eq(changes[#changes], 10, "wheel up from the shown 5")
+  n = #changes
+  drag(f, 0.016)
+  drag(f, 0.016)
+  eq(#changes, n, "the drag still knows it reached 1")
+  -- Another button's release does not end the drag; the left button's does.
+  f:_fire("OnMouseUp", "RightButton")
+  ok(f:GetScript("OnUpdate") ~= nil, "still dragging after a right-button release")
+  f:_fire("OnMouseUp", "LeftButton")
+  eq(f:GetScript("OnUpdate"), nil, "the left button's release ends it")
+  -- Disabled mid-drag: the drag stops and the slider no longer reports.
+  f:_fire("OnMouseDown", "LeftButton")
+  drag = f:GetScript("OnUpdate")
+  ok(drag ~= nil, "dragging again")
+  n = #changes
+  root:update(view(true))
+  eq(f:GetScript("OnUpdate"), nil, "turned off mid-drag, the drag ends")
+  W.cursorX = (left + tw + 50) * scale
+  drag(f, 0.016)
+  eq(#changes, n, "a disabled slider does not report")
+  ok(not f.fxDrag, "not dragging")
+  -- Unmounting a hovered slider hides its tooltip.
+  root:update(view(false))
+  f:_fire("OnEnter")
+  eq(UI.tooltipOwner(), f, "its tooltip")
+  root:unmount()
+  eq(UI.tooltipOwner(), nil, "hidden on release")
+  W.cursorX, W.cursorY = -100, -100
+end)
+
+test("tooltip: drawn in its owner's theme", function()
+  local inline = { name = "t-tip-inline", colors = { muted = "#00FF00" } }
+  UI.registerTheme({ name = "t-tip-tree", base = "default", colors = { muted = "#0000FF" } })
+  local host = CreateFrame("Frame", nil, UIParent)
+  host:SetSize(300, 50)
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 100, -300)
+  local root = UI.mount(host, UI.HStack { gap = 8,
+    UI.Help { title = "Tree", text = "The tree's theme" },
+    UI.Help { title = "Own", text = "Its own theme", theme = inline },
+  }, { theme = "t-tip-tree" })
+  local plain = UI.mount(CreateFrame("Frame", nil, UIParent), UI.Help { title = "Global", text = "The global theme" })
+  UI.flush()
+  local helps = find(root, "Help")
+  local tip = I.tooltip
+  local function muted()
+    local texts = find(tip.root, "Text")
+    return texts[#texts].region._color
+  end
+  helps[1].region:_fire("OnEnter")
+  ok(find(tip.root, "VStack")[1].theme == I.resolve("t-tip-tree"), "the mount's theme")
+  ok(math.abs(muted()[3] - 1) < 0.001 and muted()[2] < 0.001, "text in the mount's muted")
+  helps[1].region:_fire("OnLeave")
+  helps[2].region:_fire("OnEnter")
+  ok(find(tip.root, "VStack")[1].theme == I.resolve(inline), "the element's own theme")
+  ok(math.abs(muted()[2] - 1) < 0.001 and muted()[3] < 0.001, "text in the element's muted")
+  helps[2].region:_fire("OnLeave")
+  find(plain, "Help")[1].region:_fire("OnEnter")
+  eq(find(tip.root, "VStack")[1].theme, nil, "back to the global theme")
+  ok(math.abs(muted()[1] - I.resolve("default").muted.r) < 0.001, "text in the global muted")
+  UI.hideTooltip()
+  root:unmount()
+  plain:unmount()
+end)
+
+test("tooltip and help: themed, sized to content, above or below its owner, one owner at a time", function()
+  local host = CreateFrame("Frame", nil, UIParent)
+  host:SetSize(400, 100)
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 100, -300)
+  local root = UI.mount(host, UI.HStack { gap = 8,
+    UI.Help { title = "Columns", text = "Price: the lowest listing. Qty: how many are listed." },
+    UI.Help { text = "Short" },
+    UI.Help { size = 18 },
+  })
+  UI.flush()
+  local helps = find(root, "Help")
+  local f = helps[1].region
+  eq(helps[1].w, 14, "a small icon")
+  eq(I.resolve("default").metrics.Help.size, 14, "the default theme's metric")
+  eq(helps[3].w, 18, "or the size asked for")
+  eq(f.mark:GetText(), "?")
+  f:_fire("OnEnter")
+  eq(UI.tooltipOwner(), f, "its tooltip")
+  local tip = I.tooltip
+  local texts = find(tip.root, "Text")
+  eq(texts[1].el.props.text, "Columns", "the title")
+  eq(texts[1].el.props.style, "strong")
+  eq(texts[2].el.props.color, "muted", "the text under a title")
+  eq(find(tip.root, "VStack")[1].el.props.surface, "tooltip", "the theme's tooltip surface")
+  local w, h = tip.host:GetSize()
+  ok(w > 0 and w <= 260 and h > 0, "sized to its content, at most 260 wide: " .. w .. "x" .. h)
+  local at = tip.host._points[1]
+  eq(at[2], f)
+  eq(at[3], "TOP", "above its owner")
+  -- Another owner takes it; the first leaving does not hide it.
+  local g = helps[2].region
+  g:_fire("OnEnter")
+  eq(UI.tooltipOwner(), g)
+  eq(find(tip.root, "Text")[1].el.props.color, "text", "text alone")
+  f:_fire("OnLeave")
+  eq(UI.tooltipOwner(), g, "only its owner hides it")
+  g:_fire("OnLeave")
+  eq(UI.tooltipOwner(), nil)
+  -- Nothing to say: nothing shown.
+  helps[3].region:_fire("OnEnter")
+  eq(UI.tooltipOwner(), nil)
+  helps[3].region:_fire("OnLeave")
+  -- No room above: below.
+  host:ClearAllPoints()
+  host:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 100, 0)
+  UI.flush()
+  root:layout()
+  f:_fire("OnEnter")
+  eq(tip.host._points[1][3], "BOTTOM", "below its owner")
+  -- Unmounting the owner hides it.
+  root:unmount()
+  eq(UI.tooltipOwner(), nil)
+  UI.showTooltip(host, "plain text")
+  eq(UI.tooltipOwner(), host)
+  UI.showTooltip(host, { title = "", text = "no title" })
+  eq(#find(tip.root, "Text"), 1, "an empty title draws no title row")
+  eq(find(tip.root, "Text")[1].el.props.color, "text", "and the text is not muted under it")
+  UI.hideTooltip()
+  eq(UI.tooltipOwner(), nil, "hidden for any owner")
+end)
+
 test("controls: button variants, hover and press, busy, tooltip; badges; toggles", function()
   local host = CreateFrame("Frame")
   host:SetSize(600, 100)
@@ -930,9 +1220,9 @@ test("controls: button variants, hover and press, busy, tooltip; badges; toggles
     ok(not b.fxHover, "hover cleared")
   end
   buttons[1].region:_fire("OnEnter")
-  ok(GameTooltip:IsOwned(buttons[1].region), "tooltip on hover")
+  ok(UI.tooltipOwner() == buttons[1].region, "tooltip on hover")
   buttons[1].region:_fire("OnLeave")
-  ok(not GameTooltip:IsOwned(buttons[1].region), "tooltip hidden")
+  ok(UI.tooltipOwner() ~= buttons[1].region, "tooltip hidden")
   buttons[1].region:_click()
   eq(clicks, 1, "primary click")
   eq(buttons[2].h, 40, "large")

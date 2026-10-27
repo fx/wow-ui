@@ -48,12 +48,14 @@ UI.themes.default = {
   surfaces = {
     card = { bg = "ground", border = "line", radius = "r8" },
     toast = { bg = "raised", border = "#3B4047", radius = "r8" },
+    tooltip = { bg = "raised", border = "#3B4047", radius = "r4" },
     inset = { bg = "panel", border = "line", radius = "r4" },
     plain = {},
   },
   money = "letters",
   metrics = {
     Tab = { rail = 2, lineWidth = 1, railHighlight = true },
+    Help = { size = 14 },
   },
   skins = {},
   space = { 4, 8, 12, 16, 24 },

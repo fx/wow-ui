@@ -131,6 +131,7 @@ Default-theme fonts have no shadow.
 |--------------|------|--------|--------|
 | `card` | `ground` | `line` | `r8` |
 | `toast` | `raised` | `#3B4047` | `r8` |
+| `tooltip` | `raised` | `#3B4047` | `r4` |
 | `inset` | `panel` | `line` | `r4` |
 | `plain` | — | — | — |
 
@@ -158,3 +159,4 @@ Resolved color tokens are also readable from code as fields of `UI.theme` (the g
 | 2026-10-25 | Initial spec created | — |
 | 2026-10-25 | Quality color values settled; compact and signed money | — |
 | 2026-10-26 | Rewritten as built: added `onGold`, `warn`, coin colors and the `strong`, `small`, `monoSmall` fonts; surface roles; short money and coin icons; contrast rule scoped to the default theme; fonts are shipped files, not LibSharedMedia | [0001-fxui-core](../../changes/0001-fxui-core.md) |
+| 2026-10-26 | `tooltip` surface role | [0005-tooltip-help](../../changes/0005-tooltip-help.md) |
