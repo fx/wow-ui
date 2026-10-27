@@ -55,6 +55,7 @@ UI.themes.default = {
   money = "letters",
   metrics = {
     Tab = { rail = 2, lineWidth = 1, railHighlight = true },
+    Help = { size = 14 },
   },
   skins = {},
   space = { 4, 8, 12, 16, 24 },

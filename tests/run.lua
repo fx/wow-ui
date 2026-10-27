@@ -1117,6 +1117,7 @@ test("tooltip and help: themed, sized to content, above or below its owner, one 
   local helps = find(root, "Help")
   local f = helps[1].region
   eq(helps[1].w, 14, "a small icon")
+  eq(I.resolve("default").metrics.Help.size, 14, "the default theme's metric")
   eq(helps[3].w, 18, "or the size asked for")
   eq(f.mark:GetText(), "?")
   f:_fire("OnEnter")
