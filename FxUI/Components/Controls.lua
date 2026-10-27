@@ -249,11 +249,17 @@ I.defineHost("Button", {
       self.fxPressed = true
       paintButton(self)
     end)
-    b:SetScript("OnMouseUp", function(self)
+    b:SetScript("OnMouseUp", function(self, mouseButton)
       self.fxPressed = false
+      -- The client gives a disabled button no click, only the mouse up: a
+      -- right click released on it still opens its list row's menu. An
+      -- enabled one does that in OnClick.
+      local node = self.fxNode
+      if mouseButton == "RightButton" and node and not self:IsEnabled() and self:IsMouseOver() then
+        I.rowContextMenu(node)
+      end
       paintButton(self)
     end)
-
     -- The handler runs synchronously inside the real click, so a protected
     -- call made from it keeps the hardware event.
     b:SetScript("OnClick", function(self, mouseButton)

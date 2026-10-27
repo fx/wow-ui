@@ -1427,6 +1427,32 @@ test("list and table: right-clicking a row asks for its menu", function()
   find(root, "Button")[1].region:_click("LeftButton")
   eq(ran, 1, "a left click still does")
   root:unmount()
+  -- A disabled (or busy) button gets no click from the client, yet a right
+  -- click on it still opens the row's menu, once; a left click stays inert.
+  local menus = 0
+  for _, props in ipairs({ { disabled = true }, { busy = true }, {} }) do
+    menus, ran = 0, 0
+    root = UI.mount(host, UI.Table {
+      items = items, key = "id", rowHeight = 30,
+      columns = { { key = "run", width = 60, render = function()
+        return UI.Button { text = "Run", disabled = props.disabled, busy = props.busy, onClick = function() ran = ran + 1 end }
+      end } },
+      onContextMenu = function() menus = menus + 1 end,
+    })
+    UI.flush()
+    local b = find(root, "Button")[2].region
+    local bl, bb, bw, bh = b:GetRect()
+    W.cursorX, W.cursorY = bl + bw / 2, bb + bh / 2
+    b:_click("RightButton")
+    eq(menus, 1, "the row's menu, once")
+    b:_click("LeftButton")
+    eq(ran, (props.disabled or props.busy) and 0 or 1, "a left click runs only an enabled button")
+    eq(menus, 1)
+    W.cursorX, W.cursorY = -100, -100
+    b:_click("RightButton")
+    eq(menus, (props.disabled or props.busy) and 1 or 2, "a release away from a disabled button is no click")
+    root:unmount()
+  end
   -- A left click on an item cell without a click of its own selects its row.
   local picked
   root = UI.mount(host, UI.Table {
