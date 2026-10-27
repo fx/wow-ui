@@ -948,6 +948,241 @@ test("meter and sparkline: fill, labels, lines and the reference", function()
   root:unmount()
 end)
 
+-- A text input that keeps the text it is given, like a consumer would.
+local function inputView(props)
+  return UI.component("InputHost", {
+    init = function(ctx) ctx.state.value = props.value or "" end,
+    render = function(_, ctx)
+      local p = {}
+      for k, v in pairs(props) do p[k] = v end
+      p.value = ctx.state.value
+      p.onChange = function(v)
+        props.log[#props.log + 1] = "change " .. v
+        ctx:setState({ value = v })
+      end
+      if props.onPick then
+        p.onPick = function(sel)
+          props.onPick(sel)
+          ctx:setState({ value = "" })
+        end
+      end
+      p.flex = 1
+      return UI.HStack { width = 300, UI.TextInput(p) }
+    end,
+  })
+end
+
+local FRUITS = { "Apple", "Apricot", "Banana", "Blackberry", "Cherry", "Grape", "Lemon", "Lime", "Mango", "Melon", "Orange" }
+local function fruits(text)
+  local out = {}
+  for _, f in ipairs(FRUITS) do
+    if text ~= "" and f:lower():find(text:lower(), 1, true) then out[#out + 1] = { text = f, hint = #f .. " letters" } end
+  end
+  return out
+end
+
+test("text input: typing, a controlled value, placeholder, Enter and Escape, disabled", function()
+  local log = {}
+  local root = UI.mount(UIParent, inputView({ log = log, placeholder = "Search",
+    onSubmit = function(t) log[#log + 1] = "submit " .. t end,
+    onEscape = function() log[#log + 1] = "escape" end }) {})
+  UI.flush()
+  local node = find(root, "TextInput")[1]
+  local box = node.region
+  eq(box:GetObjectType(), "EditBox")
+  eq(box:GetText(), "")
+  ok(box.placeholder:IsShown(), "the placeholder while empty")
+  eq(box.placeholder:GetText(), "Search")
+  eq(node.h, 28)
+  box:_clickIn()
+  ok(box:HasFocus())
+  box:_typeIn("ap")
+  UI.flush()
+  eq(log[#log], "change ap")
+  eq(box:GetText(), "ap", "the consumer's value matches")
+  ok(not box.placeholder:IsShown())
+  box:_key("ENTER")
+  eq(log[#log], "submit ap")
+  box:_key("ESCAPE")
+  eq(log[#log], "escape")
+  ok(not box:HasFocus(), "Escape leaves the input")
+  -- A value from the consumer replaces the text, without onChange.
+  local n = #log
+  root:update(UI.HStack { width = 300, UI.TextInput { value = "set", onChange = function() log[#log + 1] = "no" end } })
+  UI.flush()
+  box = find(root, "TextInput")[1].region
+  eq(box:GetText(), "set")
+  eq(#log, n, "no onChange for a value set by the consumer")
+  -- Disabled: no focus, faded.
+  root:update(UI.HStack { width = 300, UI.TextInput { value = "set", disabled = true } })
+  UI.flush()
+  box:_clickIn()
+  ok(not box:HasFocus(), "a disabled input takes no focus")
+  eq(box:GetAlpha(), 0.5)
+  root:unmount()
+end)
+
+test("text input: the theme's inset surface, its border gold while focused, in either theme", function()
+  local root = UI.mount(UIParent, UI.HStack { width = 300, UI.TextInput { placeholder = "Find" } })
+  UI.flush()
+  local box = find(root, "TextInput")[1].region
+  ok(box.fxBg and box.fxBg:IsShown(), "a background")
+  box:_clickIn()
+  local r, g, b = box.fxRing:GetVertexColor()
+  local gr, gg, gb = I.rgba("gold")
+  ok(r == gr and g == gg and b == gb, "a gold border while focused")
+  box:ClearFocus()
+  root:unmount()
+  root = UI.mount(UIParent, UI.HStack { width = 300, UI.TextInput { placeholder = "Find" } }, { theme = "classic" })
+  UI.flush()
+  box = find(root, "TextInput")[1].region
+  ok(box.fxHasBackdrop and box._backdrop, "the Classic inset backdrop")
+  local idle = table.concat(box._backdropBorder, ",")
+  box:_clickIn()
+  ok(table.concat(box._backdropBorder, ",") ~= idle, "its border gold while focused")
+  box:ClearFocus()
+  eq(table.concat(box._backdropBorder, ","), idle, "and back")
+  root:unmount()
+end)
+
+test("text input: suggestions under it: Up and Down, Enter or a click picks, at most maxSuggestions", function()
+  local log, picked = {}, {}
+  local root = UI.mount(UIParent, inputView({ log = log, suggest = fruits, maxSuggestions = 3,
+    onPick = function(sel) picked[#picked + 1] = sel.text end,
+    onSubmit = function(t) log[#log + 1] = "submit " .. t end }) {})
+  UI.flush()
+  local box = find(root, "TextInput")[1].region
+  box:_clickIn()
+  eq(UI.suggestions(box), nil, "nothing for an empty text")
+  box:_typeIn("a")
+  UI.flush()
+  local list, active = UI.suggestions(box)
+  eq(#list, 3, "at most maxSuggestions")
+  eq(list[1].text, "Apple")
+  eq(active, 1, "the first is active")
+  local host = I.input.host
+  ok(host:IsShown())
+  eq(host._points[1][2], box, "under the input")
+  ok(host:GetWidth() >= 300, "as wide as the input")
+  eq(#find(I.input.root, "Pressable"), 3)
+  box:_key("DOWN")
+  box:_key("DOWN")
+  box:_key("DOWN")
+  local _, a = UI.suggestions(box)
+  eq(a, 1, "Down wraps round")
+  box:_key("UP")
+  _, a = UI.suggestions(box)
+  eq(a, 3, "Up wraps round")
+  box:_key("ENTER")
+  eq(picked[1], "Banana", "Enter picks the active one")
+  eq(log[#log], "change a", "not submitted")
+  UI.flush()
+  eq(box:GetText(), "", "the consumer cleared it")
+  eq(UI.suggestions(box), nil, "the list closed")
+  -- Typing again starts from the first; a click picks the one clicked.
+  box:_typeIn("me")
+  UI.flush()
+  list = UI.suggestions(box)
+  eq(#list, 2, "Lemon, Melon")
+  find(I.input.root, "Pressable")[2].region:_click()
+  eq(picked[2], "Melon")
+  -- Nothing matches: no list, and Enter submits.
+  box:_typeIn("zzz")
+  UI.flush()
+  eq(UI.suggestions(box), nil)
+  box:_key("ENTER")
+  eq(log[#log], "submit zzz")
+  -- Leaving the input closes its list.
+  box:_typeIn("li")
+  UI.flush()
+  ok(UI.suggestions(box), "Lime")
+  box:ClearFocus()
+  eq(UI.suggestions(box), nil, "closed on focus lost")
+  ok(not host:IsShown())
+  box:SetFocus()
+  ok(UI.suggestions(box), "shown again on focus")
+  root:unmount()
+  ok(not host:IsShown(), "unmounting closes it")
+  eq(W.focus, nil, "and gives up the focus")
+end)
+
+test("text input: item suggestions draw item cells; a click on the cell picks it", function()
+  local picked
+  local root = UI.mount(UIParent, UI.HStack { width = 300, UI.TextInput {
+    suggest = function() return { { item = 2589, hint = "x5" } } end,
+    onPick = function(sel) picked = sel end } })
+  UI.flush()
+  local box = find(root, "TextInput")[1].region
+  box:_clickIn()
+  local cells = find(I.input.root, "ItemCell")
+  eq(#cells, 1, "focus with text that suggests shows the list")
+  cells[1].region:_click()
+  eq(picked and picked.item, 2589)
+  root:unmount()
+end)
+
+test("text input: a shift-clicked link goes into the focused input that takes links, once", function()
+  local log = {}
+  local root = UI.mount(UIParent, UI.VStack { width = 300,
+    inputView({ log = log, links = true }) {},
+    UI.TextInput { placeholder = "no links" },
+  })
+  UI.flush()
+  local inputs = find(root, "TextInput")
+  local box, other = inputs[1].region, inputs[2].region
+  local link = "|cffffffff|Hitem:2589::|h[Linen Cloth]|h|r"
+  W.now = W.now + 1
+  ChatEdit_InsertLink(link)
+  eq(box:GetText(), "", "not without the focus")
+  box:_clickIn()
+  W.now = W.now + 1
+  -- The old global goes through ChatFrameUtil: both hooks see it, once in.
+  ChatEdit_InsertLink(link)
+  UI.flush()
+  eq(box:GetText(), link)
+  eq(log[#log], "change " .. link)
+  W.now = W.now + 1
+  ChatFrameUtil.InsertLink(link)
+  eq(box:GetText(), link .. link, "the next one goes in too")
+  -- An input without links leaves it alone.
+  other:_clickIn()
+  W.now = W.now + 1
+  ChatFrameUtil.InsertLink(link)
+  eq(other:GetText(), "")
+  -- onLink handles it instead; an open chat line still gets it.
+  local got
+  root:update(UI.VStack { width = 300, UI.TextInput { links = true, onLink = function(l) got = l end } })
+  UI.flush()
+  box = find(root, "TextInput")[1].region
+  box:_clickIn()
+  W.chatOpen = true
+  W.now = W.now + 1
+  ok(ChatFrameUtil.InsertLink("|Hspell:1|h[Spell]|h"), "the client's own insert still answers")
+  W.chatOpen = nil
+  eq(got, "|Hspell:1|h[Spell]|h")
+  eq(box:GetText(), "", "onLink instead of the text")
+  eq(W.chatLinks[#W.chatLinks], "|Hspell:1|h[Spell]|h")
+  root:unmount()
+end)
+
+test("item cell: a shift-click links the item through the client's insert, hooks included", function()
+  local log = {}
+  local root = UI.mount(UIParent, UI.VStack { width = 300,
+    inputView({ log = log, links = true }) {},
+    UI.ItemCell { item = "|cffffffff|Hitem:2589::|h[Linen Cloth]|h|r" },
+  })
+  UI.flush()
+  local box = find(root, "TextInput")[1].region
+  box:_clickIn()
+  local realModified = IsModifiedClick
+  IsModifiedClick = function(what) return what == "CHATLINK" end
+  W.now = W.now + 1
+  find(root, "ItemCell")[1].region:_click()
+  IsModifiedClick = realModified
+  eq(box:GetText(), "|cffffffff|Hitem:2589::|h[Linen Cloth]|h|r")
+  root:unmount()
+end)
+
 -- A slider that keeps the value it is given, like a consumer would.
 local function sliderView(props)
   return UI.component("SliderHost", {

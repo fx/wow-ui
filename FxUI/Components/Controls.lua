@@ -1096,3 +1096,246 @@ UI.TabBar = I.defineComponent("TabBar", function(props)
     UI.TabRail {},
   }
 end)
+
+---------------------------------------------------------------------------
+-- TextInput
+---------------------------------------------------------------------------
+
+local INPUT_W, INPUT_H, INPUT_PAD = 200, 28, 8
+local SUGGEST_MAX, SUGGEST_MIN_W = 8, 200
+
+-- One focused input, one suggestion list and one link hook for every copy
+-- of the library: an upgrade keeps them.
+I.input = I.input or {}
+local IN = I.input
+
+local function inputProps(box)
+  local node = box and box.fxNode
+  return node and node.el.props
+end
+
+local function paintInput(box)
+  local node = box.fxNode
+  if not node then return end
+  local prevTheme = I.enter(node)
+  local p = node.el.props
+  -- The theme's inset surface; the focused input's border in gold.
+  local role = I.theme().surfaces.inset
+  local focused = box:HasFocus() and not p.disabled
+  if focused and not (role and role.backdrop) then
+    I.clearBackdrop(box)
+    I.applySurface(box, role and role.bg or "panel", "gold", role and role.radius or "r4")
+  else
+    I.paintSurface(box, { surface = "inset" })
+    if focused and box.fxHasBackdrop then box:SetBackdropBorderColor(I.rgba("gold")) end
+  end
+  box.placeholder:SetShown(box:GetText() == "")
+  box:SetAlpha(p.disabled and 0.5 or 1)
+  I.leave(prevTheme)
+end
+
+local SuggestView = I.defineComponent("FxSuggestions", function(props)
+  local body = { gap = 0, padding = 4, surface = "tooltip", align = "stretch" }
+  for i, s in ipairs(props.items or {}) do
+    local function pick() props.onPick(i) end
+    local row = { horizontal = true, gap = 8, align = "center", padding = { 4, 8 }, hover = "fill", onClick = pick }
+    if s.item then
+      row[#row + 1] = UI.ItemCell { item = s.item, iconSize = 18, flex = 1, onClick = pick }
+    else
+      row[#row + 1] = UI.Text { text = s.text or "", flex = 1 }
+    end
+    if s.hint and s.hint ~= "" then row[#row + 1] = UI.Text { text = s.hint, style = "small", color = "muted" } end
+    local pressable = UI.Pressable(row)
+    if i == props.active then
+      body[#body + 1] = UI.VStack { align = "stretch", bg = "gold", bgAlpha = 0.16, radius = "r4", pressable }
+    else
+      body[#body + 1] = pressable
+    end
+  end
+  return UI.VStack(body)
+end)
+
+function I.hideSuggestions(box)
+  if IN.host and (box == nil or IN.owner == box) then
+    IN.host:Hide()
+    IN.owner, IN.list = nil, nil
+  end
+end
+
+local pickSuggestion
+
+-- Show (or refresh) the suggestions `suggest(text)` gives for the box,
+-- under it; none hides the list.
+function I.showSuggestions(box)
+  local p = inputProps(box)
+  if not p or not p.suggest or p.disabled or not box:HasFocus() then
+    I.hideSuggestions(box)
+    return
+  end
+  local all = p.suggest(box:GetText()) or {}
+  local list = {}
+  for i = 1, math.min(#all, p.maxSuggestions or SUGGEST_MAX) do list[i] = all[i] end
+  if #list == 0 then
+    I.hideSuggestions(box)
+    return
+  end
+  if IN.owner ~= box then IN.active = 1 end
+  IN.active = math.min(math.max(IN.active or 1, 1), #list)
+  IN.owner, IN.list = box, list
+  local view = SuggestView { items = list, active = IN.active, onPick = function(i) pickSuggestion(box, i) end }
+  if not IN.host then
+    local host = CreateFrame("Frame", nil, UIParent)
+    host:SetFrameStrata("FULLSCREEN_DIALOG")
+    host:SetClampedToScreen(true)
+    I.followScale(host, false)
+    IN.host = host
+    IN.root = UI.mount(host, view)
+  else
+    IN.root:update(view)
+  end
+  local w = math.max(box:GetWidth(), SUGGEST_MIN_W)
+  local _, h = I.measure(IN.root.node, w, 2000)
+  IN.host:SetSize(w, h)
+  IN.root:layout()
+  IN.host:ClearAllPoints()
+  IN.host:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 0, -2)
+  IN.host:Show()
+end
+
+-- The box's suggestion i: the list closes, then onPick(suggestion).
+pickSuggestion = function(box, i)
+  local s = IN.owner == box and IN.list and IN.list[i]
+  if not s then return false end
+  I.hideSuggestions(box)
+  local p = inputProps(box)
+  if p and p.onPick then p.onPick(s) end
+  return true
+end
+
+-- The suggestions shown, and which is active, for the box (nil when none).
+function UI.suggestions(box)
+  if IN.owner == box and IN.host and IN.host:IsShown() then return IN.list, IN.active end
+end
+
+-- A link the client inserts (a shift-click on an item, a spell, ...) goes
+-- into the focused input that takes links. Both of the client's insert
+-- functions are hooked, so the same link can come through twice in one
+-- frame: it goes in once.
+function I.inputLink(text)
+  local box = IN.focused
+  local p = inputProps(box)
+  if type(text) ~= "string" or text == "" or not p or not p.links or p.disabled or not box:HasFocus() then return end
+  local now = GetTime()
+  if IN.lastLink == text and IN.lastAt == now then return end
+  IN.lastLink, IN.lastAt = text, now
+  if p.onLink then
+    p.onLink(text)
+  else
+    box:Insert(text)
+    if p.onChange then p.onChange(box:GetText()) end
+  end
+  I.showSuggestions(box)
+end
+
+local function hookLinks()
+  if IN.hooked then return end
+  IN.hooked = true
+  -- Post-hooks: the client's own insert runs untouched (no taint), then
+  -- the newest copy's handler.
+  local function hook(text) I.inputLink(text) end
+  if ChatFrameUtil and type(ChatFrameUtil.InsertLink) == "function" then hooksecurefunc(ChatFrameUtil, "InsertLink", hook) end
+  if type(ChatEdit_InsertLink) == "function" then hooksecurefunc("ChatEdit_InsertLink", hook) end
+end
+
+-- Props: value (the text; when given, the input shows it: a controlled
+-- input), placeholder, onChange(text) as the player types, onSubmit(text)
+-- on Enter, onEscape(), disabled, maxLetters, tooltip; links = true takes
+-- shift-clicked links at the cursor (onLink(link) instead, to handle them);
+-- suggest(text) -> { { text | item, hint, ... } } lists suggestions under
+-- the input (at most maxSuggestions, default 8): Up and Down move, Enter or
+-- a click picks one with onPick(suggestion).
+I.defineHost("TextInput", {
+  create = function(holder)
+    hookLinks()
+    local box = CreateFrame("EditBox", nil, holder)
+    box:SetAutoFocus(false)
+    box:SetTextInsets(INPUT_PAD, INPUT_PAD, 0, 0)
+    box.placeholder = box:CreateFontString(nil, "ARTWORK")
+    box.placeholder:SetPoint("LEFT", box, "LEFT", INPUT_PAD, 0)
+    box.placeholder:SetWordWrap(false)
+    box:SetScript("OnEditFocusGained", function(self)
+      IN.focused = self
+      paintInput(self)
+      I.showSuggestions(self)
+    end)
+    box:SetScript("OnEditFocusLost", function(self)
+      if IN.focused == self then IN.focused = nil end
+      paintInput(self)
+      I.hideSuggestions(self)
+    end)
+    box:SetScript("OnTextChanged", function(self, userInput)
+      local p = inputProps(self)
+      if not p then return end
+      self.placeholder:SetShown(self:GetText() == "")
+      if not userInput then return end
+      IN.active = 1
+      if p.onChange then p.onChange(self:GetText()) end
+      I.showSuggestions(self)
+    end)
+    box:SetScript("OnEnterPressed", function(self)
+      local p = inputProps(self)
+      if not p then return end
+      if UI.suggestions(self) and pickSuggestion(self, IN.active) then return end
+      if p.onSubmit then p.onSubmit(self:GetText()) end
+    end)
+    box:SetScript("OnEscapePressed", function(self)
+      local p = inputProps(self)
+      self:ClearFocus()
+      if p and p.onEscape then p.onEscape() end
+    end)
+    box:SetScript("OnArrowPressed", function(self, key)
+      local list = UI.suggestions(self)
+      if not list then return end
+      if key == "DOWN" then
+        IN.active = IN.active % #list + 1
+      elseif key == "UP" then
+        IN.active = (IN.active - 2) % #list + 1
+      else
+        return
+      end
+      I.showSuggestions(self)
+    end)
+    box:SetScript("OnEnter", function(self)
+      local p = inputProps(self)
+      if p then showTooltip(self, p.tooltip) end
+    end)
+    box:SetScript("OnLeave", function(self) hideTooltip(self) end)
+    return box
+  end,
+  update = function(node, p)
+    local box = node.region
+    box:SetFontObject(UI.font("body"))
+    box:SetTextColor(I.rgba("text"))
+    box:SetMaxLetters(p.maxLetters or 0)
+    I.setText(box.placeholder, p.placeholder, "body", "muted")
+    box:EnableMouse(not p.disabled)
+    if p.disabled and box:HasFocus() then box:ClearFocus() end
+    if p.value ~= nil and tostring(p.value) ~= box:GetText() then box:SetText(tostring(p.value)) end
+    paintInput(box)
+    if UI.suggestions(box) then I.showSuggestions(box) end
+  end,
+  measure = function()
+    return INPUT_W, INPUT_H
+  end,
+  layout = function(node, w)
+    node.region.placeholder:SetWidth(math.max(w - 2 * INPUT_PAD, 1))
+  end,
+  release = function(node)
+    local box = node.region
+    if box:HasFocus() then box:ClearFocus() end
+    I.hideSuggestions(box)
+    if IN.focused == box then IN.focused = nil end
+    box:SetText("")
+    hideTooltip(box)
+  end,
+})

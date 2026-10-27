@@ -22,8 +22,8 @@ end
 -- Classes
 ---------------------------------------------------------------------------
 
-local Region, Frame, Button, Texture, Line, Mask, FontString, Font = {}, {}, {}, {}, {}, {}, {}, {}
-local ALL = { Region, Frame, Button, Texture, Line, Mask, FontString, Font }
+local Region, Frame, Button, EditBox, Texture, Line, Mask, FontString, Font = {}, {}, {}, {}, {}, {}, {}, {}, {}
+local ALL = { Region, Frame, Button, EditBox, Texture, Line, Mask, FontString, Font }
 local universe = {}
 
 local function inherit(child, parent)
@@ -74,7 +74,7 @@ function Region:IsShown() return self._shown ~= false end
 function Region:SetAlpha(a) self._alpha = a end
 function Region:SetParent(p)
   local old = self._parent
-  if old and old._regions and self._type ~= "Frame" and self._type ~= "Button" then
+  if old and old._regions and self._type ~= "Frame" and self._type ~= "Button" and self._type ~= "EditBox" then
     for i, r in ipairs(old._regions) do
       if r == self then table.remove(old._regions, i) break end
     end
@@ -265,6 +265,61 @@ function Button:_click(mouseButton)
 end
 setters(Button, "SetMotionScriptsWhileDisabled")
 
+-- EditBox: one has the keyboard focus at a time (W.focus). Text set from
+-- code fires OnTextChanged with userInput false; _type fires it true, as
+-- the player typing.
+inherit(EditBox, Frame)
+function EditBox:SetText(t)
+  self._text = t == nil and "" or tostring(t)
+  self:_fire("OnTextChanged", false)
+end
+function EditBox:GetText() return self._text or "" end
+function EditBox:Insert(t)
+  self._text = (self._text or "") .. tostring(t)
+  self:_fire("OnTextChanged", false)
+end
+function EditBox:SetFocus()
+  if W.focus == self then return end
+  local old = W.focus
+  W.focus = self
+  if old then old:_fire("OnEditFocusLost") end
+  self:_fire("OnEditFocusGained")
+end
+function EditBox:ClearFocus()
+  if W.focus ~= self then return end
+  W.focus = nil
+  self:_fire("OnEditFocusLost")
+end
+function EditBox:HasFocus() return W.focus == self end
+function EditBox:SetFontObject(f)
+  assert(type(f) == "table" and f._isFont, "SetFontObject needs a font object")
+  self._font = f
+end
+function EditBox:SetTextColor(r, g, b, a)
+  assert(type(r) == "number" and type(g) == "number" and type(b) == "number", "SetTextColor needs numbers")
+  self._color = { r, g, b, a }
+end
+function EditBox:SetMaxLetters(n)
+  assert(type(n) == "number" and n >= 0, "SetMaxLetters needs a number")
+  self._maxLetters = n
+end
+setters(EditBox, "SetAutoFocus SetTextInsets")
+-- Test helpers: a click (focus), typing, and a key (ENTER, ESCAPE, UP, DOWN).
+function EditBox:_clickIn()
+  if self._mouse then self:SetFocus() end
+end
+function EditBox:_typeIn(text)
+  assert(W.focus == self, "typing needs the focus")
+  self._text = text
+  self:_fire("OnTextChanged", true)
+end
+function EditBox:_key(key)
+  assert(W.focus == self, "a key needs the focus")
+  if key == "ENTER" then self:_fire("OnEnterPressed")
+  elseif key == "ESCAPE" then self:_fire("OnEscapePressed")
+  else self:_fire("OnArrowPressed", key) end
+end
+
 -- Textures
 inherit(Texture, Region)
 -- A texture shows either a file or a color, like the client: setting one
@@ -417,8 +472,8 @@ end
 
 function CreateFrame(kind, name, parent)
   count(kind)
-  local class = (kind == "Button") and Button or Frame
-  assert(kind == "Frame" or kind == "Button", "stub: unsupported frame type " .. tostring(kind))
+  local class = (kind == "Button") and Button or (kind == "EditBox") and EditBox or Frame
+  assert(kind == "Frame" or kind == "Button" or kind == "EditBox", "stub: unsupported frame type " .. tostring(kind))
   local f = W.new(class, { _parent = parent, _kind = kind, _type = kind })
   W.frames[#W.frames + 1] = f
   if name then _G[name] = f end
@@ -478,7 +533,30 @@ BackdropTemplateMixin = {
   SetBackdropBorderColor = function(self, r, g, b, a) self._backdropBorder = { r, g, b, a } end,
   OnBackdropSizeChanged = function() end,
 }
-function ChatEdit_InsertLink() return true end
+-- The client's link insert: the chat line, when open, takes it. Like the
+-- client, the old global goes through ChatFrameUtil.
+W.chatLinks = {}
+ChatFrameUtil = {
+  InsertLink = function(text)
+    if not W.chatOpen then return false end
+    W.chatLinks[#W.chatLinks + 1] = text
+    return true
+  end,
+}
+function ChatEdit_InsertLink(text) return ChatFrameUtil.InsertLink(text) end
+-- A post-hook on a global function or a table's: hooks run after it, with
+-- its arguments, and its returns are kept.
+function hooksecurefunc(tbl, name, fn)
+  if type(tbl) == "string" then tbl, name, fn = _G, tbl, name end
+  local orig = tbl[name]
+  assert(type(orig) == "function", "hooksecurefunc: no function " .. tostring(name))
+  tbl[name] = function(...)
+    local r = { orig(...) }
+    fn(...)
+    return unpack(r)
+  end
+end
+function GetTime() return W.now end
 
 Enum = { UITextureSliceMode = { Stretched = 0, Tiled = 1 } }
 

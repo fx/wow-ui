@@ -23,7 +23,7 @@ This spec owns the behaviour of FxUI's data-oriented components: money, item cel
 - While the client has not loaded the item, the cell MUST show a placeholder (`placeholder`, or `item:<id>` in the muted color), request the item, and update and re-lay out once it loads.
 - After the name it MUST show `×<qty>` when `qty` is given, else `ilvl <n>` when `showLevel` is set, else `note`.
 - Hovering MUST show the client's item tooltip, followed by lines the consumer adds through `tooltip(GameTooltip, itemID)`.
-- A click with the chat-link modifier (Shift by default) MUST insert the item link into chat; any other click MUST call `onClick(frame, itemID, link, mouseButton)`. Without an `onClick`, a left click on a cell in a list row MUST select that row (the list's `onSelect`), as a click on the row would.
+- A click with the chat-link modifier (Shift by default) MUST insert the item link through the client's insert, looked up at the click (so hooks on it, such as a focused [text input](../components/#text-input)'s, see it); any other click MUST call `onClick(frame, itemID, link, mouseButton)`. Without an `onClick`, a left click on a cell in a list row MUST select that row (the list's `onSelect`), as a click on the row would.
 - `iconSize` (default 24) sets the icon size; `style` the name's font token. When the cell is narrower than its content, the name MUST be truncated, not the icon or the extra text.
 
 #### Scenario: Item loads later
@@ -172,3 +172,4 @@ A Table renders a header `HStack` of `UI.HeaderCell`s (its right padding include
 | 2026-10-26 | Row right-clicks: `onContextMenu` | [0007-context-menu](../../changes/0007-context-menu.md) |
 | 2026-10-26 | An item cell without its own click selects its list row | [0008-toggle-group](../../changes/0008-toggle-group.md) |
 | 2026-10-27 | Scroll anchoring: a scrolled keyed list keeps its top row in place when given a new items table | [0009-scroll-anchoring](../../changes/0009-scroll-anchoring.md) |
+| 2026-10-27 | An item cell's shift-click goes through the client's insert as it is at the click | [0010-text-input](../../changes/0010-text-input.md) |
