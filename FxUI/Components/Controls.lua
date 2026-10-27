@@ -499,16 +499,17 @@ local function sliderAt(f)
 end
 
 -- Move to stop i; onChange only when the stop changes: from the value
--- shown, or during a drag from the last stop the drag reached, so a
--- consumer that has not taken the value yet hears of each stop once.
-local function sliderSet(f, i)
+-- shown, or for the drag (`drag` true) from the last stop it reached, so a
+-- consumer that has not taken the value yet hears of each stop once. Only
+-- the drag reads or moves that stop; the wheel steps from the value shown.
+local function sliderSet(f, i, drag)
   local node = f.fxNode
   if not node then return end
   local p = node.el.props
   local stops = f.fxStops
   i = math.min(math.max(i, 1), #stops)
-  local from = f.fxDragStop or sliderIndex(stops, p.value)
-  if f.fxDrag then f.fxDragStop = i end
+  local from = drag and f.fxDragStop or sliderIndex(stops, p.value)
+  if drag then f.fxDragStop = i end
   if i == from then return end
   if p.onChange then p.onChange(stops[i]) end
 end
@@ -525,7 +526,7 @@ local function sliderDrag(f)
     paintSlider(f)
     return
   end
-  sliderSet(f, sliderAt(f))
+  sliderSet(f, sliderAt(f), true)
 end
 
 -- The label's width with its gap, and room for the widest value, so the
@@ -584,7 +585,7 @@ I.defineHost("Slider", {
       local node = self.fxNode
       if not node or node.el.props.disabled or (button and button ~= "LeftButton") then return end
       self.fxDrag = true
-      sliderSet(self, sliderAt(self))
+      sliderSet(self, sliderAt(self), true)
       paintSlider(self)
       self:SetScript("OnUpdate", sliderDrag)
     end)

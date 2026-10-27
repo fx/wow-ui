@@ -1045,6 +1045,21 @@ test("slider: a drag notifies once per stop, ends on the left button, stops when
   drag(f, 0.016)
   eq(#changes, 2, "once for the next stop")
   eq(changes[2], 0)
+  -- The wheel during a drag steps from the shown stop and leaves the drag's
+  -- own tracking alone.
+  W.cursorX = (left + tw / 5) * scale
+  drag(f, 0.016)
+  eq(changes[#changes], 1, "dragged to 1")
+  local n = #changes
+  f:_fire("OnMouseWheel", -1)
+  eq(#changes, n + 1, "wheel down from the shown 5, though the drag is at 1")
+  eq(changes[#changes], 1)
+  f:_fire("OnMouseWheel", 1)
+  eq(changes[#changes], 10, "wheel up from the shown 5")
+  n = #changes
+  drag(f, 0.016)
+  drag(f, 0.016)
+  eq(#changes, n, "the drag still knows it reached 1")
   -- Another button's release does not end the drag; the left button's does.
   f:_fire("OnMouseUp", "RightButton")
   ok(f:GetScript("OnUpdate") ~= nil, "still dragging after a right-button release")
@@ -1054,7 +1069,7 @@ test("slider: a drag notifies once per stop, ends on the left button, stops when
   f:_fire("OnMouseDown", "LeftButton")
   drag = f:GetScript("OnUpdate")
   ok(drag ~= nil, "dragging again")
-  local n = #changes
+  n = #changes
   root:update(view(true))
   eq(f:GetScript("OnUpdate"), nil, "turned off mid-drag, the drag ends")
   W.cursorX = (left + tw + 50) * scale
