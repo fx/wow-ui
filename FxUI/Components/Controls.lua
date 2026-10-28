@@ -1182,7 +1182,10 @@ function I.showSuggestions(box)
   if IN.owner ~= box then IN.active = 1 end
   IN.active = math.min(math.max(IN.active or 1, 1), #list)
   IN.owner, IN.list = box, list
-  local view = SuggestView { items = list, active = IN.active, onPick = function(i) pickSuggestion(box, i) end }
+  -- In the input's theme, taken again on every refresh, like the tooltip.
+  local node = box.fxNode
+  local view = SuggestView { items = list, active = IN.active, onPick = function(i) pickSuggestion(box, i) end,
+    theme = node and node.alive and node.theme or nil }
   if not IN.host then
     local host = CreateFrame("Frame", nil, UIParent)
     host:SetFrameStrata("FULLSCREEN_DIALOG")

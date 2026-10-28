@@ -1165,6 +1165,35 @@ test("text input: a shift-clicked link goes into the focused input that takes li
   root:unmount()
 end)
 
+test("text input: its suggestions are drawn in its theme", function()
+  local inline = { name = "t-suggest-inline", colors = { muted = "#00FF00" } }
+  local function suggest() return { { text = "One", hint = "first" } } end
+  local root = UI.mount(UIParent, UI.VStack { width = 300,
+    UI.TextInput { suggest = suggest },
+    UI.TextInput { suggest = suggest, theme = inline },
+  }, { theme = "classic" })
+  local plain = UI.mount(CreateFrame("Frame", nil, UIParent), UI.HStack { width = 300, UI.TextInput { suggest = suggest } })
+  UI.flush()
+  local inputs = find(root, "TextInput")
+  local function body() return find(I.input.root, "VStack")[1] end
+  local function hint()
+    local texts = find(I.input.root, "Text")
+    return texts[#texts].region._color
+  end
+  inputs[1].region:_clickIn()
+  ok(UI.suggestions(inputs[1].region), "shown on focus")
+  ok(body().theme == I.resolve("classic"), "the mount's theme")
+  inputs[2].region:_clickIn()
+  ok(body().theme == I.resolve(inline), "the input's own theme")
+  ok(math.abs(hint()[2] - 1) < 0.001 and hint()[1] < 0.001, "the hint in the input's muted")
+  find(plain, "TextInput")[1].region:_clickIn()
+  eq(body().theme, nil, "the global theme")
+  ok(math.abs(hint()[1] - I.resolve("default").muted.r) < 0.001, "the hint in the global muted")
+  find(plain, "TextInput")[1].region:ClearFocus()
+  root:unmount()
+  plain:unmount()
+end)
+
 test("item cell: a shift-click links the item through the client's insert, hooks included", function()
   local log = {}
   local root = UI.mount(UIParent, UI.VStack { width = 300,
