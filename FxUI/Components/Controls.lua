@@ -1205,11 +1205,14 @@ function I.showSuggestions(box)
   IN.host:Show()
 end
 
--- The box's suggestion i: the list closes, then onPick(suggestion).
+-- The box's suggestion i: the list closes, then onPick(suggestion). It
+-- stays closed while the consumer sets the text in response, until the
+-- player types, a link goes in or the input takes the focus again.
 pickSuggestion = function(box, i)
   local s = IN.owner == box and IN.list and IN.list[i]
   if not s then return false end
   I.hideSuggestions(box)
+  IN.picked = box
   local p = inputProps(box)
   if p and p.onPick then p.onPick(s) end
   return true
@@ -1231,6 +1234,7 @@ function I.inputLink(text)
   local now = GetTime()
   if IN.lastLink == text and IN.lastAt == now then return end
   IN.lastLink, IN.lastAt = text, now
+  if IN.picked == box then IN.picked = nil end
   if p.onLink then
     p.onLink(text)
   else
@@ -1271,6 +1275,7 @@ I.defineHost("TextInput", {
     box.placeholder:SetWordWrap(false)
     box:SetScript("OnEditFocusGained", function(self)
       IN.focused = self
+      if IN.picked == self then IN.picked = nil end
       paintInput(self)
       I.showSuggestions(self)
     end)
@@ -1279,13 +1284,23 @@ I.defineHost("TextInput", {
       paintInput(self)
       I.hideSuggestions(self)
     end)
+    -- Every change of text, typed or set (a value from the consumer, a
+    -- link), lists the suggestions again from the first; only typing calls
+    -- onChange. Text set right after a pick leaves the list closed.
     box:SetScript("OnTextChanged", function(self, userInput)
       local p = inputProps(self)
       if not p then return end
-      self.placeholder:SetShown(self:GetText() == "")
-      if not userInput then return end
-      IN.active = 1
-      if p.onChange then p.onChange(self:GetText()) end
+      local text = self:GetText()
+      self.placeholder:SetShown(text == "")
+      if text == self.fxText and not userInput then return end
+      self.fxText = text
+      if IN.owner == self then IN.active = 1 end
+      if userInput then
+        if IN.picked == self then IN.picked = nil end
+        if p.onChange then p.onChange(text) end
+      elseif IN.picked == self then
+        return
+      end
       I.showSuggestions(self)
     end)
     box:SetScript("OnEnterPressed", function(self)
@@ -1341,7 +1356,9 @@ I.defineHost("TextInput", {
     if box:HasFocus() then box:ClearFocus() end
     I.hideSuggestions(box)
     if IN.focused == box then IN.focused = nil end
+    if IN.picked == box then IN.picked = nil end
     box:SetText("")
+    box.fxText = nil
     hideTooltip(box)
   end,
 })

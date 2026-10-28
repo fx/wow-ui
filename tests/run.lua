@@ -1217,6 +1217,53 @@ test("text input: its suggestions are drawn in its theme", function()
   plain:unmount()
 end)
 
+test("text input: every change of text refreshes the suggestions from the first; a pick keeps them closed", function()
+  local picked
+  local function suggest(text)
+    if text == "" or text:find("z", 1, true) then return {} end
+    return { { text = text .. " 1" }, { text = text .. " 2" }, { text = text .. " 3" } }
+  end
+  local function view(value)
+    return UI.HStack { width = 300,
+      UI.TextInput { value = value, suggest = suggest, links = true, onPick = function(s) picked = s end } }
+  end
+  local root = UI.mount(UIParent, view("zz"))
+  UI.flush()
+  local box = find(root, "TextInput")[1].region
+  box:_clickIn()
+  eq(UI.suggestions(box), nil, "nothing for zz")
+  root:update(view("ap"))
+  UI.flush()
+  local list, active = UI.suggestions(box)
+  ok(list, "a value from the consumer that suggests opens the list")
+  eq(list and list[1].text, "ap 1")
+  box:_key("DOWN")
+  root:update(view("ab"))
+  UI.flush()
+  list, active = UI.suggestions(box)
+  eq(list and list[1].text, "ab 1", "refreshed for the new value")
+  eq(active, 1, "the first active again")
+  box:_key("DOWN")
+  local link = "|Hitem:1|h[X]|h"
+  W.now = W.now + 1
+  ChatFrameUtil.InsertLink(link)
+  list, active = UI.suggestions(box)
+  eq(list and list[1].text, "ab" .. link .. " 1", "refreshed after a link")
+  eq(active, 1, "the first active after a link")
+  box:_key("DOWN")
+  box:_key("ENTER")
+  eq(picked and picked.text, "ab" .. link .. " 2")
+  eq(UI.suggestions(box), nil, "closed by the pick")
+  root:update(view(picked.text))
+  UI.flush()
+  eq(box:GetText(), picked.text)
+  eq(UI.suggestions(box), nil, "the consumer's text after a pick keeps it closed")
+  box:_typeIn("ac")
+  ok(UI.suggestions(box), "typing opens it again")
+  box:ClearFocus()
+  root:unmount()
+end)
+
 test("item cell: a shift-click links the item through the client's insert, hooks included", function()
   local log = {}
   local root = UI.mount(UIParent, UI.VStack { width = 300,
