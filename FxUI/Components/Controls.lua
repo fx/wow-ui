@@ -1234,7 +1234,9 @@ function I.inputLink(text)
   if p.onLink then
     p.onLink(text)
   else
-    box:Insert(text)
+    -- At the end of the text: Insert would go in at the cursor, or replace
+    -- the selection.
+    box:SetText(box:GetText() .. text)
     if p.onChange then p.onChange(box:GetText()) end
   end
   I.showSuggestions(box)
@@ -1253,10 +1255,11 @@ end
 -- Props: value (the text; when given, the input shows it: a controlled
 -- input), placeholder, onChange(text) as the player types, onSubmit(text)
 -- on Enter, onEscape(), disabled, maxLetters, tooltip; links = true takes
--- shift-clicked links at the cursor (onLink(link) instead, to handle them);
--- suggest(text) -> { { text | item, hint, ... } } lists suggestions under
--- the input (at most maxSuggestions, default 8): Up and Down move, Enter or
--- a click picks one with onPick(suggestion).
+-- shift-clicked links at the end of the text (onLink(link) instead, to
+-- handle them); suggest(text) -> { { text | item, hint, ... } } lists
+-- suggestions under the input, in its theme (at most maxSuggestions,
+-- default 8): Up and Down move, Enter or a click picks one with
+-- onPick(suggestion).
 I.defineHost("TextInput", {
   create = function(holder)
     hookLinks()

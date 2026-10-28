@@ -267,16 +267,38 @@ setters(Button, "SetMotionScriptsWhileDisabled")
 
 -- EditBox: one has the keyboard focus at a time (W.focus). Text set from
 -- code fires OnTextChanged with userInput false; _type fires it true, as
--- the player typing.
+-- the player typing. Like the client, it has a cursor (a byte offset) and
+-- a selection: SetText puts the cursor at the end and clears the
+-- selection; Insert replaces the selection, or goes in at the cursor.
 inherit(EditBox, Frame)
 function EditBox:SetText(t)
   self._text = t == nil and "" or tostring(t)
+  self._cursor, self._sel = #self._text, nil
   self:_fire("OnTextChanged", false)
 end
 function EditBox:GetText() return self._text or "" end
 function EditBox:Insert(t)
-  self._text = (self._text or "") .. tostring(t)
+  local text = self._text or ""
+  local from, to = self._cursor or #text, self._cursor or #text
+  if self._sel then from, to = self._sel[1], self._sel[2] end
+  t = tostring(t)
+  self._text = text:sub(1, from) .. t .. text:sub(to + 1)
+  self._cursor, self._sel = from + #t, nil
   self:_fire("OnTextChanged", false)
+end
+function EditBox:SetCursorPosition(pos)
+  assert(type(pos) == "number", "SetCursorPosition needs a number")
+  self._cursor = math.max(0, math.min(pos, #(self._text or "")))
+  self._sel = nil
+end
+function EditBox:GetCursorPosition() return self._cursor or #(self._text or "") end
+-- HighlightText(start, stop): selects [start, stop), all without arguments;
+-- an empty range clears the selection.
+function EditBox:HighlightText(start, stop)
+  local len = #(self._text or "")
+  start = math.max(0, math.min(start or 0, len))
+  stop = (stop == nil or stop < 0) and len or math.min(stop, len)
+  self._sel = stop > start and { start, stop } or nil
 end
 function EditBox:SetFocus()
   if W.focus == self then return end
@@ -311,6 +333,7 @@ end
 function EditBox:_typeIn(text)
   assert(W.focus == self, "typing needs the focus")
   self._text = text
+  self._cursor, self._sel = #text, nil
   self:_fire("OnTextChanged", true)
 end
 function EditBox:_key(key)

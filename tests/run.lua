@@ -1165,6 +1165,29 @@ test("text input: a shift-clicked link goes into the focused input that takes li
   root:unmount()
 end)
 
+test("text input: a link goes in at the end of its text, wherever the cursor or the selection is", function()
+  local log = {}
+  local root = UI.mount(UIParent, inputView({ log = log, links = true }) {})
+  UI.flush()
+  local box = find(root, "TextInput")[1].region
+  box:_clickIn()
+  box:_typeIn("abc")
+  UI.flush()
+  local link = "|cffffffff|Hitem:2589::|h[Linen Cloth]|h|r"
+  box:SetCursorPosition(1)
+  W.now = W.now + 1
+  ChatFrameUtil.InsertLink(link)
+  UI.flush()
+  eq(box:GetText(), "abc" .. link, "after the text, not at the cursor")
+  eq(log[#log], "change abc" .. link)
+  box:HighlightText(0, 3)
+  W.now = W.now + 1
+  ChatFrameUtil.InsertLink(link)
+  UI.flush()
+  eq(box:GetText(), "abc" .. link .. link, "after the text, the selection kept")
+  root:unmount()
+end)
+
 test("text input: its suggestions are drawn in its theme", function()
   local inline = { name = "t-suggest-inline", colors = { muted = "#00FF00" } }
   local function suggest() return { { text = "One", hint = "first" } } end
