@@ -1209,6 +1209,56 @@ test("text input: a link goes in at the end of its text, wherever the cursor or 
   root:unmount()
 end)
 
+test("text input: maxLetters limits typing, a link and a value; a link that does not fit stays out", function()
+  local log = {}
+  local root = UI.mount(UIParent, inputView({ log = log, links = true, maxLetters = 20 }) {})
+  UI.flush()
+  local box = find(root, "TextInput")[1].region
+  box:_clickIn()
+  box:_typeIn(string.rep("x", 25))
+  UI.flush()
+  eq(box:GetText(), string.rep("x", 20), "typing stops at maxLetters")
+  eq(log[#log], "change " .. string.rep("x", 20))
+  box:_typeIn("abc")
+  UI.flush()
+  local link = "|Hitem:1|h[X]|h" -- 15 letters
+  W.now = W.now + 1
+  ChatFrameUtil.InsertLink(link)
+  UI.flush()
+  eq(box:GetText(), "abc" .. link, "a link that fits goes in")
+  eq(log[#log], "change abc" .. link)
+  local n = #log
+  W.now = W.now + 1
+  ChatFrameUtil.InsertLink("|Hitem:2|h[Y]|h")
+  UI.flush()
+  eq(box:GetText(), "abc" .. link, "a link that does not fit stays out, whole")
+  eq(#log, n, "and no onChange")
+  -- A longer value shows its first maxLetters letters, never part of a link.
+  local function view(value, max)
+    return UI.HStack { width = 300, UI.TextInput { value = value, maxLetters = max,
+      onChange = function(t) log[#log + 1] = "no " .. t end } }
+  end
+  root:update(view(string.rep("y", 30), 20))
+  UI.flush()
+  box = find(root, "TextInput")[1].region
+  eq(box:GetText(), string.rep("y", 20), "a long value cut to maxLetters")
+  root:update(view("ab" .. link .. "cd", 20))
+  UI.flush()
+  eq(box:GetText(), "ab" .. link .. "cd", "a value that fits, link and all")
+  root:update(view("abcd" .. link, 18))
+  UI.flush()
+  eq(box:GetText(), "abcd", "a link that does not fit is left out of the value")
+  root:update(view("|cffffffff" .. link .. "|r", 20))
+  UI.flush()
+  eq(box:GetText(), "", "a colored link counts its color codes")
+  root:update(view("äöüß", 3))
+  UI.flush()
+  eq(box:GetText(), "äöü", "in letters, not bytes")
+  eq(#log, n, "no onChange for a value")
+  box:ClearFocus()
+  root:unmount()
+end)
+
 test("text input: its suggestions are drawn in its theme", function()
   local inline = { name = "t-suggest-inline", colors = { muted = "#00FF00" } }
   local function suggest() return { { text = "One", hint = "first" } } end

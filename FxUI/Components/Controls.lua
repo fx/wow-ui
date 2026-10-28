@@ -1114,6 +1114,29 @@ local function inputProps(box)
   return node and node.el.props
 end
 
+-- Letters as an EditBox counts them for SetMaxLetters: UTF-8 characters,
+-- a link's escape codes included.
+local function letterCount(text)
+  local _, n = text:gsub("[^\128-\191]", "")
+  return n
+end
+
+-- The longest start of text within max letters (none or 0: no limit) that
+-- cuts no link and no character. The client's SetText keeps the first max
+-- letters, which can end inside a link.
+local function fitLetters(text, max)
+  if not max or max <= 0 or letterCount(text) <= max then return text end
+  local pos, n = 1, 0
+  while pos <= #text do
+    local token = text:match("^|c[^|]*|H.-|h.-|h|r", pos) or text:match("^|H.-|h.-|h", pos)
+      or text:match("^.[\128-\191]*", pos)
+    n = n + letterCount(token)
+    if n > max then break end
+    pos = pos + #token
+  end
+  return text:sub(1, pos - 1)
+end
+
 local function paintInput(box)
   local node = box.fxNode
   if not node then return end
@@ -1234,13 +1257,17 @@ function I.inputLink(text)
   local now = GetTime()
   if IN.lastLink == text and IN.lastAt == now then return end
   IN.lastLink, IN.lastAt = text, now
-  if IN.picked == box then IN.picked = nil end
   if p.onLink then
+    if IN.picked == box then IN.picked = nil end
     p.onLink(text)
   else
     -- At the end of the text: Insert would go in at the cursor, or replace
-    -- the selection.
-    box:SetText(box:GetText() .. text)
+    -- the selection. A link that does not fit in maxLetters stays out,
+    -- whole: SetText would keep only its start.
+    local new = box:GetText() .. text
+    if (p.maxLetters or 0) > 0 and letterCount(new) > p.maxLetters then return end
+    if IN.picked == box then IN.picked = nil end
+    box:SetText(new)
     if p.onChange then p.onChange(box:GetText()) end
   end
   I.showSuggestions(box)
@@ -1258,9 +1285,10 @@ end
 
 -- Props: value (the text; when given, the input shows it: a controlled
 -- input), placeholder, onChange(text) as the player types, onSubmit(text)
--- on Enter, onEscape(), disabled, maxLetters, tooltip; links = true takes
--- shift-clicked links at the end of the text (onLink(link) instead, to
--- handle them); suggest(text) -> { { text | item, hint, ... } } lists
+-- on Enter, onEscape(), disabled, maxLetters (letters, a link's codes
+-- included: a link that does not fit stays out, a longer value shows the
+-- start that fits), tooltip; links = true takes shift-clicked links at the
+-- end of the text (onLink(link) instead, to handle them); suggest(text) -> { { text | item, hint, ... } } lists
 -- suggestions under the input, in its theme (at most maxSuggestions,
 -- default 8): Up and Down move, Enter or a click picks one with
 -- onPick(suggestion).
@@ -1341,7 +1369,12 @@ I.defineHost("TextInput", {
     I.setText(box.placeholder, p.placeholder, "body", "muted")
     box:EnableMouse(not p.disabled)
     if p.disabled and box:HasFocus() then box:ClearFocus() end
-    if p.value ~= nil and tostring(p.value) ~= box:GetText() then box:SetText(tostring(p.value)) end
+    -- A value longer than maxLetters shows the start that fits, never part
+    -- of a link.
+    if p.value ~= nil then
+      local text = fitLetters(tostring(p.value), p.maxLetters)
+      if text ~= box:GetText() then box:SetText(text) end
+    end
     paintInput(box)
     if UI.suggestions(box) then I.showSuggestions(box) end
   end,
