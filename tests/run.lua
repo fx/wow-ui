@@ -1259,6 +1259,27 @@ test("text input: maxLetters limits typing, a link and a value; a link that does
   root:unmount()
 end)
 
+test("text input: its tooltip shows on hover, for the input, and hides when the cursor leaves", function()
+  local root = UI.mount(UIParent, UI.VStack { width = 300,
+    UI.TextInput { tooltip = { title = "Search", text = "Names or links" } },
+    UI.TextInput {},
+  })
+  UI.flush()
+  local inputs = find(root, "TextInput")
+  local box = inputs[1].region
+  box:_fire("OnEnter")
+  eq(UI.tooltipOwner(), box, "shown for the input")
+  local texts = find(I.tooltip.root, "Text")
+  eq(texts[1].el.props.text, "Search", "the title")
+  eq(texts[2].el.props.text, "Names or links", "the text")
+  box:_fire("OnLeave")
+  eq(UI.tooltipOwner(), nil, "hidden when the cursor leaves")
+  inputs[2].region:_fire("OnEnter")
+  eq(UI.tooltipOwner(), nil, "none without a tooltip")
+  inputs[2].region:_fire("OnLeave")
+  root:unmount()
+end)
+
 test("text input: its suggestions are drawn in its theme", function()
   local inline = { name = "t-suggest-inline", colors = { muted = "#00FF00" } }
   local function suggest() return { { text = "One", hint = "first" } } end
