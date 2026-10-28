@@ -67,6 +67,20 @@ This spec owns the behaviour of FxUI's general-purpose components: text primitiv
 - **WHEN** the player presses at the start of the track, drags past its end and releases
 - **THEN** `onChange` receives 0 and then 100, once each, and nothing more until the stop changes again
 
+### Text input
+
+- `UI.TextInput` MUST draw a one-line text field (natural size 200 × 28 px) on the theme's `inset` surface, its border in `gold` while it has the keyboard focus, with `placeholder` in the muted color while it is empty. It takes the focus when clicked, never on its own.
+- Typing MUST call `onChange(text)`; text set by the consumer never does. When `value` is given the input shows it (a controlled input: the consumer passes back what `onChange` gave); without it the input keeps what is typed. Enter MUST call `onSubmit(text)`, unless a suggestion is picked; Escape MUST leave the input and call `onEscape()`. `maxLetters` MUST limit the text to that many letters (UTF-8 characters, a link's escape codes included, as the client counts them): typing stops there; a link that does not fit MUST stay out, whole, without `onChange`; a longer `value` MUST show the longest start of it that fits and cuts no link, without `onChange`. `tooltip` (text or `{ title, text }`) MUST show [FxUI's tooltip](#tooltip) for the input while the cursor is over it and hide when it leaves.
+- `disabled` MUST draw it faded and give it no focus; becoming disabled leaves the input. Unmounting it MUST leave it and close its suggestions.
+- With `links = true`, a link the client inserts (a shift-click on an item, in a bag or on an [item cell](../data-components/#item-cell), and so on) while the input has the focus MUST go in at the end of its text, once, and call `onChange`; with `onLink(link)` that is called instead. FxUI hooks both of the client's insert functions (`ChatFrameUtil.InsertLink` and `ChatEdit_InsertLink`) with post-hooks, so the client's own insert runs untouched (an open chat line still takes the link), and the same link through both in one frame counts once.
+- With `suggest(text)`, the input MUST list what it returns (`{ text | item, hint }`; at most `maxSuggestions`, default 8) under itself, at least as wide as itself (at least 200 px), on the `tooltip` surface, in the input's theme, whenever it has the focus and the list is not empty: on focus, as the player types, when the consumer sets another `value`, and after a link goes in. An `item` draws as an item cell. One suggestion is active (the first, after each change of text), washed in `gold`; Up and Down move it, wrapping round; Enter or a click on a suggestion MUST close the list and call `onPick(suggestion)`, and text the consumer sets in response leaves it closed until the player types, a link goes in or the input takes the focus again. Leaving the input closes the list. `UI.suggestions(input)` returns the list shown for an input and the active index, or nil.
+
+#### Scenario: Pick a suggestion
+
+- **GIVEN** a focused input whose `suggest` returns the fruit names containing the text
+- **WHEN** the player types "a", presses Up and then Enter
+- **THEN** the list showed the first matches with the first active, Up wrapped round to the last, and `onPick` received that one with the list closed
+
 ### Tooltip
 
 - `UI.showTooltip(owner, spec)` MUST show FxUI's own tooltip for a frame: `spec` is text or `{ title, text, maxWidth }`; the title in the `strong` font, the text wrapped, muted under a title, in the `tooltip` surface of its owner's theme: the [theme that applies](../theming/#which-theme-applies) to the FxUI element the owner frame is, else the global theme, taken again each time it is shown.
@@ -240,3 +254,4 @@ The toast stack is an FxUI tree mounted once, on first use, in a `DIALOG`-strata
 | 2026-10-26 | Pressable | [0006-pressable](../../changes/0006-pressable.md) |
 | 2026-10-26 | Context menu; row right-clicks in lists and tables | [0007-context-menu](../../changes/0007-context-menu.md) |
 | 2026-10-26 | Toggle group | [0008-toggle-group](../../changes/0008-toggle-group.md) |
+| 2026-10-27 | Text input: links, suggestions | [0010-text-input](../../changes/0010-text-input.md) |

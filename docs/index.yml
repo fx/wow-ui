@@ -103,3 +103,10 @@ changes:
     spec: data-components
     status: complete
     depends_on: ["0008"]
+  - id: "0010"
+    name: text-input
+    path: changes/0010-text-input.md
+    description: UI.TextInput - a one-line field with a controlled value, shift-clicked links and a suggestion list
+    spec: components
+    status: complete
+    depends_on: ["0007"]

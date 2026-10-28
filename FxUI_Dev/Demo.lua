@@ -9,6 +9,21 @@ local ITEMS = {
   3300, 4865, 18832, 19364, 19019, 17182, 32837, 49623, 71086, 77949,
 }
 
+-- Text input suggestions: the demo's items whose names the client has,
+-- matching the text; a linked item first.
+local function itemSuggestions(text)
+  local out = {}
+  local linked = tonumber(text:match("item:(%d+)"))
+  if linked then out[1] = { item = linked, hint = "linked" } end
+  local q = text:lower()
+  if q == "" or linked then return out end
+  for _, id in ipairs(ITEMS) do
+    local name = C_Item.GetItemInfo(id)
+    if name and name:lower():find(q, 1, true) then out[#out + 1] = { item = id, hint = "#" .. id } end
+  end
+  return out
+end
+
 local TAGS = {
   { text = "New", tone = "up" },
   { text = "Hot", tone = "warn" },
@@ -97,6 +112,7 @@ local ControlsPage = UI.component("DemoControls", {
     ctx.state.extras = false
     ctx.state.spent = 12400000
     ctx.state.minPrice = 50000
+    ctx.state.search = ""
     ctx.state.level = 3
   end,
   render = function(_, ctx)
@@ -201,6 +217,15 @@ local ControlsPage = UI.component("DemoControls", {
             onChange = function(v) ctx:setState({ minPrice = v }) end },
           UI.Slider { label = "Level", min = 0, max = 10, value = s.level, onChange = function(v) ctx:setState({ level = v }) end },
           UI.Slider { label = "Disabled", min = 0, max = 10, value = 7, disabled = true },
+        }),
+        Card("Text input", {
+          UI.TextInput { value = s.search, placeholder = "Search items, or shift-click one", links = true,
+            tooltip = "Type part of a name, or shift-click an item while the input has the focus.",
+            suggest = itemSuggestions,
+            onChange = function(v) ctx:setState({ search = v }) end,
+            onPick = function(sel) ctx:setState({ search = "", picked = sel.item }) end },
+          UI.ItemCell { item = s.picked, placeholder = "Nothing picked yet" },
+          UI.TextInput { placeholder = "Disabled", disabled = true },
         }),
       },
       UI.VStack {

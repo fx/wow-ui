@@ -227,7 +227,12 @@ I.defineHost("ItemCell", {
   end,
 })
 
-insertLink = (ChatFrameUtil and ChatFrameUtil.InsertLink) or ChatEdit_InsertLink
+-- Looked up on each click: a hook installed later (the text input's) must
+-- see the link.
+insertLink = function(link)
+  local insert = (ChatFrameUtil and ChatFrameUtil.InsertLink) or ChatEdit_InsertLink
+  if insert then return insert(link) end
+end
 
 ---------------------------------------------------------------------------
 -- Meter
