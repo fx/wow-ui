@@ -18,6 +18,17 @@ local function utf8len(s)
   return n
 end
 
+-- The first n letters (UTF-8 characters) of s.
+local function utf8prefix(s, n)
+  local count, stop = 0, 0
+  for at in s:gmatch("()[^\128-\191]") do
+    if count == n then return s:sub(1, at - 1) end
+    count = count + 1
+    stop = at
+  end
+  return s
+end
+
 ---------------------------------------------------------------------------
 -- Classes
 ---------------------------------------------------------------------------
@@ -270,9 +281,17 @@ setters(Button, "SetMotionScriptsWhileDisabled")
 -- the player typing. Like the client, it has a cursor (a byte offset) and
 -- a selection: SetText puts the cursor at the end and clears the
 -- selection; Insert replaces the selection, or goes in at the cursor.
+-- SetMaxLetters(n) limits the text to n letters (UTF-8 characters, escape
+-- codes included; 0: no limit), as the client does: SetText keeps the
+-- first n, Insert and typing take only what fits.
 inherit(EditBox, Frame)
+local function clip(box, text)
+  local max = box._maxLetters or 0
+  if max > 0 and utf8len(text) > max then return utf8prefix(text, max) end
+  return text
+end
 function EditBox:SetText(t)
-  self._text = t == nil and "" or tostring(t)
+  self._text = clip(self, t == nil and "" or tostring(t))
   self._cursor, self._sel = #self._text, nil
   self:_fire("OnTextChanged", false)
 end
@@ -282,6 +301,11 @@ function EditBox:Insert(t)
   local from, to = self._cursor or #text, self._cursor or #text
   if self._sel then from, to = self._sel[1], self._sel[2] end
   t = tostring(t)
+  local max = self._maxLetters or 0
+  if max > 0 then
+    local rest = text:sub(1, from) .. text:sub(to + 1)
+    t = utf8prefix(t, math.max(max - utf8len(rest), 0))
+  end
   self._text = text:sub(1, from) .. t .. text:sub(to + 1)
   self._cursor, self._sel = from + #t, nil
   self:_fire("OnTextChanged", false)
@@ -332,8 +356,8 @@ function EditBox:_clickIn()
 end
 function EditBox:_typeIn(text)
   assert(W.focus == self, "typing needs the focus")
-  self._text = text
-  self._cursor, self._sel = #text, nil
+  self._text = clip(self, text)
+  self._cursor, self._sel = #self._text, nil
   self:_fire("OnTextChanged", true)
 end
 function EditBox:_key(key)
